@@ -31,17 +31,25 @@ acks: |
 ---
 
 ```{.haskell .hidden}
+{-# language ScopedTypeVariables   #-}
+{-# language TypeOperators         #-}
+{-# language ViewPatterns          #-}
+{-# language DuplicateRecordFields #-}
+module Main where
+
+import           Data.Aeson
 import qualified Data.Set as Set
 import           Data.Set(Set)
+import           GHC.Generics(Generic)
 
 ```
 Minimal definition of the type^[We describe laws as QuickCheck properties for convenience.]:
 
 ```haskell
 class Monoid ty
-   => Types ty term | ty -> term where
-  infer :: term -> type
-  check :: type -> term -> Bool
+   => ty `Types` term | ty -> term where
+  infer ::         term -> ty
+  check :: ty   -> term -> Bool
 
 class_law_types :: Types ty term => term -> Bool
 class_law_types term = check (infer term) term
@@ -53,6 +61,10 @@ Please note that our type is a _join-semilattice_
 class Monoid ty
    => Semilattice ty where
    bottom, top :: ty
+
+class ty `Types` term where
+  infer ::       term -> ty
+  check :: ty -> term -> Bool
 ```
 Here `bottom` stands for no value permitted (empty term,
   without even a `null`).
@@ -87,13 +99,15 @@ data FreeType Value =
 
 In other words, for any `T` value type Set T` satisfies our notion of _free type_, with:
 ```{.haskell}
-newtype FreeType = FreeType (Set Value)
-instance Monoid FreeType
-  (<>) = Set.<>
+newtype FreeType a = FreeType { captured :: Set a }
 
-instance Types Value FreeType where
-  infer = Set.singleton
-  check = flip Set.member
+instance Monoid FreeType where
+  mappend = Set.union -- mappend
+  mempty  = Set.empty
+
+instance FreeType `Types` Value where
+  infer = FreeType . Set.singleton
+  check = flip Set.member . captured
 ```
 This definition is sound, and for a finite realm of values, may make a sense.
 For example for a set of inputs^[Conforming to Haskell and JSON syntax, we use list for marking the elements of the set.]:
@@ -205,30 +219,44 @@ and likelihood of their occurence.
   - use `String` versus `Int` outright, instead of any JSON `Value`.
   - assuming that we have a set of parsers that are mutually exclusive, we can implement this for `String` values:
 ```haskell
-data TStringConstraint = TDate
-                       | TEnum Set String
-                       | TAny
+data TStringConstraint = TSCDate
+                       | TSCEnum (Set String)
+                       | TSCNever -- never seen any sample
 
-infer (String (parseDate -> Right _)) = TString (TSCDate)
-infer (String  value                ) = TString (TSCEnum $ Set.singleton value)
+instance TStringConstraint `Types` String where
+  infer (String (parseDate -> Right _)) = TString (TSCDate)
+  infer (String  value                ) = TString (TSCEnum $ Set.singleton value)
 ```
 
 Then whenever unifying the `String` constraint:
 ```haskell
-TSCDate <> TSCEnum _ = TSCAny
-TSCEnum a <> TSCEnum b | length a + length b < 10 = TSCEnum (a <> b)
+instance Semigroup TStringConstraint where
+  TSCDate   <> TSCEnum _ = TSCAny
+  TSCEnum a <> TSCEnum b | length a + length b < 10 = TSCEnum (a <> b)
+  TSCEnum a <> TSCEnum b                            = TSCAny
+
+instance Monoid TStringConstraint where
+  mappend = (<>)
+  mempty  = TSCNA
 ```
 
 Analogically we may infer for integer constraints^[Program makes it optional `--infer-int-ranges`.] as:
-```
+```haskell
 data TIntConstraint = TRange Int Int
 ```
 
 Variant fields for union types are also simple, we implement them with a cousin of `Either` type
 that assumes these types are exclusive:
-```
-  decode a =  AltLeft  <$> decodeEither
-          <|> AltRight <$> decodeEither
+```haskell
+data a :|: b = AltLeft  a
+             | AltRight b
+  deriving (Show, Eq, Generic)
+
+instance (FromJSON  a
+         ,FromJSON        b)
+      =>  FromJSON (a :|: b) where
+  parseJSON a =  AltLeft  <$> decodeEither
+             <|> AltRight <$> decodeEither
 ```
 In other words for `Int :|: String` type we first check if the value is `String`, and if it fails try to parse it as `String`.
 
@@ -238,18 +266,19 @@ Variant records are a bit more complicated, since it is unclear which typing is 
 {"error" : "Authorization failed", "code" : 401}
 ```
 
-```
-date OurRecord = {message :: Maybe String
-                 ,error   :: Maybe String
-                 ,code    :: Maybe Int
-                 ,uid     :: Maybe Int}
+```haskell
+data OurRecord =
+  OurRecord { message :: Maybe String
+            , error   :: Maybe String
+            , code    :: Maybe Int
+            , uid     :: Maybe Int }
 ```
 Or maybe:
-```
-date OurRecord = Message { message :: String
-                         , uid     :: Int }
-               | Error { error :: String
-                       , code :: Int }
+```haskell
+data OurRecord2 = Message { message :: String
+                          , uid     :: Int }
+                | Error { error :: String
+                        , code :: Int }
 ```
 
 The best attempt here, is to rely on our examples being reasonable exhaustive.
@@ -258,7 +287,7 @@ are matching. And then compare it to type complexity (with optionalities being m
 In this case latter definition has only one choice (optionality), but we only have two samples to begin with.
 
 Assuming we have more samples, the pattern emerges:
-```
+```json
 {"error" : "Authorization failed", "code" : 401}
 {"message" : "Where can I submit my proposal?", "uid" : 1014}
 {"message" : "Sent it to HotCRP", "uid" : 93}
@@ -274,9 +303,11 @@ for the typing:
 
 1. We generalize basic datatypes:
 ```{.haskell}
-infer (Bool _) = bottom { bool = True }
-infer (Int  _) = bottom { int  = True }
-infer  Null    = bottom { null = True }
+instance JSONType `Types` Value where
+    infer (Bool _) = bottom { bool = True }
+    infer (Int  _) = bottom { int  = True }
+    infer  Null    = bottom { null = True }
+    -- ...
 ```
 Note that we treat `null` as separate basic types,
 that can form union with any other.
@@ -392,6 +423,16 @@ and makes output less redundant.
 
 Thus we derive types that are valid with respect to specification, and thus give the best information
 from the input.
+
+# Appendix
+
+Final `JSONType`:
+```haskell
+data JSONType =
+  JSONType { bool, int, null :: Bool
+           , stringConstraint :: StringConstraint
+           }
+```
 
 # Bibliography
 If inference fails, we can always correct it by adding additional example.
