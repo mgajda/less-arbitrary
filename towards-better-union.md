@@ -35,7 +35,7 @@ import qualified Data.Set as Set
 import           Data.Set(Set)
 
 ```
-Minimal definition of the type:
+Minimal definition of the type^[We describe laws as QuickCheck properties for convenience.]:
 
 ```haskell
 class Monoid ty
@@ -43,14 +43,25 @@ class Monoid ty
   infer :: term -> type
   check :: type -> term -> Bool
 
--- Laws:
-class_law_types :: Types ty term =>
-class_law_types term = check (infer term) term == True
+class_law_types :: Types ty term => term -> Bool
+class_law_types term = check (infer term) term
 ```
+
+Please note that our type is a _join-semilattice_
+(since it always allows union of two different types):
+```
+class Monoid ty
+   => Semilattice ty where
+   bottom, top :: ty
+```
+Here `bottom` stands for no value permitted (empty term,
+  without even a `null`).
+  For example an empty array `[]` could be typed
+  as a array type with `bottom` elements.
 
 Note that `Monoid` operation is a type unification.
 
-Since we are interested in JSON, we use JSON term, instead of more general definition:
+Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
 ```
 data Value =
     Object Object
@@ -74,15 +85,31 @@ data FreeType Value =
 
 ```
 
-In other words, for any type `T` `Set T` satisfies our notion of free type,
-with `infer = Set.singleton`, `check = flip Set.member`, and `<>`.
+In other words, for any `T` value type Set T` satisfies our notion of _free type_, with:
+```{.haskell}
+newtype FreeType = FreeType (Set Value)
+instance Monoid FreeType
+  (<>) = Set.<>
+
+instance Types Value FreeType where
+  infer = Set.singleton
+  check = flip Set.member
+```
 This definition is sound, and for a finite realm of values, may make a sense.
-For example for a set of inputs:
-`"yes", "no", "error"`, we might reasonably say that type is indeed
+For example for a set of inputs^[Conforming to Haskell and JSON syntax, we use list for marking the elements of the set.]:
+`["yes", "no", "error"]`, we might reasonably say that type is indeed
 a good approximation of C-style enumeration, or Haskell-style ADT without constructor arguments.
 
 What is wrong with this notion of _free type_?
-It does not generalize at all! It only allows the objects from the sample, and nothing more.
+It does not generalize at all to infinite and recursive domains! It only allows the objects from the sample, and nothing more.
+
+## Union type system engineering
+
+Given that we want to infer the type from finite number of samples
+we are presented with _learning problem_,
+so we need to use _prior_ knowledge of the domain
+to generalize when inferring types.
+
 Clearly after seeing `a: false` we can expect that it is sometimes `a: true`.
 After seeing `b: 123` we expect that `b: 100` would also be acceptable.
 That means that we need our typing to _learn a reasonable general class from few instances._
@@ -239,6 +266,46 @@ Assuming we have more samples, the pattern emerges:
 {"error" : "Authorization failed", "code" : 401}
 ```
 
+### Selecting basic priors
+
+Now that we defined the type system engineering
+as prior selection, let's state some obvious rules
+for the typing:
+
+1. We generalize basic datatypes:
+```{.haskell}
+infer (Bool _) = bottom { bool = True }
+infer (Int  _) = bottom { int  = True }
+infer  Null    = bottom { null = True }
+```
+Note that we treat `null` as separate basic types,
+that can form union with any other.
+Thus `bottom` indicates _no type and no value_.
+The `top` of our semilattice is the type of any `Value` term.
+
+2. We allow for unification of basic types, by typewise unification:
+```
+infer (TUnion { bool, int,  :: TPresent
+              })
+```
+
+### Dealing with conflicting alternatives
+
+Crux of union type systems have been long
+dealing with conflicting types on the input.
+
+Motivated by examples above, we want to also deal
+with conflicting alternative assignments.
+
+It is apparent that examples 4. to 6.
+hint at more than one assignment:
+5. Either a list of lists of values that are one of `Int`, `String`, or `null`, or a table that has the same (and predefined) type
+for each
+
+6. Either a record of fixed names,
+or the mapping from hash to a single object type.
+
+
 ### Number of samples
 
 How can we make sure that we have a right number of samples?
@@ -280,6 +347,46 @@ and given enough samples, attempt to detect patterns ^[If we detect pattern to e
 In order to preserve efficiency, we might want to merge whenever, number of alternatives in the multiset crosses the threshold.
 ^[Option `--max-alternative-constructors=N`]
 And only attempt to narrow strings when cardinality crosses the threshold ^[Option `--min-enumeration-cardinality`.]
+
+## Heuristics for better types
+
+Final touch would be to postprocess assigned type
+before generating it, in order to make it more resilient
+to common uncertainties.
+
+Note that these assumptions my sidestep
+our validity criterion from initial part
+of the paper, however they proved to work
+well in practice.
+
+### No observations of array type
+
+If we have no observations of array type,
+it can be inconvenient to disallow array to
+contain any value at all.
+Thus we make a non-monotonic step of
+converting final `bottom` to `top`,
+and allowing any `Value` there on the input.
+
+That is because, our program must not have any assumptions
+about these values, but at the same it should be able to
+output them for debugging purposes.
+
+### Simplification by finding unification candidates
+
+In most JSON documents we found that
+the same object was described in different
+parts of the sample datastructures.
+Because of that, we compare sets of labels
+assigned to all objects, and propose
+to unify those that have more than 60% identical labels.
+
+For transparency, candidates found are logged for the user,
+and user can also indicate them explicitly instead
+of relying on automation.
+
+We found that this greatly decreases complexity of the types,
+and makes output less redundant.
 
 ## Conclusion
 
