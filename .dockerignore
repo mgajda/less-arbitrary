@@ -1,0 +1,7 @@
+.git
+out/
+graphviz-images
+pd-images
+*.aux
+*.log
+*.synctex.gz
