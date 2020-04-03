@@ -45,7 +45,7 @@ class_law_types term = check (infer term) term
 
 Please note that our type is a _bounded join-semilattice_
 (since it always allows union of two different types):
-```haskell
+```{.haskell #typeclass}
 class Monoid ty
    => Semilattice ty where
    bottom, top :: ty
@@ -59,6 +59,7 @@ Note that `Monoid` operation is a type unification.
 
 Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
 ```{.haskell file=Aeson.hs}
+{-# LINE 62 "towards-better-union.md" #-}
 data Value =
     Object Object
   | Array  Array
@@ -73,11 +74,11 @@ For any `T` value type Set T` satisfies our notion of _free type_.
 ```{.haskell #freetype}
 newtype FreeType a = FreeType { captured :: Set a }
 
-instance Monoid FreeType where
+instance (Ord a, Eq a) => Monoid (FreeType a) where
   mappend = Set.union -- mappend
   mempty  = Set.empty
 
-instance FreeType `Types` Value where
+instance (Ord a, Eq a) => FreeType a `Types` Value where
   infer = FreeType . Set.singleton
   check = flip Set.member . captured
 ```
@@ -128,11 +129,17 @@ Aiming for this, we set the rules of type design:
   then `X :: x` and `Y :: y` must be also a valid typing.
 
 ```{.haskell #type}
+
 data UnionType =
-    TObj Map.Map String FreeType
-  | TArr [FreeType]
-  | TString StringConstraint
-  | TNumber NumberConstraint
+  UnionType {
+    unionBool   :: Maybe ()
+  , unionInt    :: IntConstraint
+  , unionString :: StringConstraint
+  -- FIXME:
+  , unionObj    :: Map.Map String UnionType
+  , unionArr    :: [UnionType]
+  }
+  --deriving (Eq,Show,Generic)
 ```
 
 ## JSON examples
@@ -153,7 +160,8 @@ Now let's give some motivating examples from realm of JSON API types:
     - `{"error"   : "Authorization failed",            "code" :  401}`
 
 5. Arrays in place of records^[Which strikes author as a bad practice, but we want to handle it nevertheless. Possible with `--bad-array-records` option.]:
-```javascript {file=example5.json}
+```json {file=example5.json}
+
 [
   [1, "Nick",    null       ]
 , [2, "George", "2019-04-11"]
@@ -162,7 +170,7 @@ Now let's give some motivating examples from realm of JSON API types:
 ```
 
 6. Maps of identical objects:
-```javascript {file=test/example6.json}
+```json {file=test/example6.json}
 {
     "6408f5": {
         "size": 969709,
@@ -207,35 +215,67 @@ and likelihood of their occurence.
 
 ### Which of these types we may infer?
 
+#### Basic types
+
 1. Given a sample of values, we can have a reasonable approximation of expected values:
   - use `String` versus `Int` outright, instead of any JSON `Value`.
   - assuming that we have a set of parsers that are mutually exclusive, we can implement this for `String` values:
-```haskell
-data TStringConstraint = TSCDate
-                       | TSCEnum (Set String)
-                       | TSCNever -- never seen any sample
+```{.haskell #basic-constraints}
+data StringConstraint = SCDate
+                      | SCEnum (Set String)
+                      | SCNever -- never seen any sample
 
-instance TStringConstraint `Types` String where
-  infer (String (parseDate -> Right _)) = TString (TSCDate)
-  infer (String  value                ) = TString (TSCEnum $ Set.singleton value)
+instance StringConstraint `Types` String where
+  infer (String (parseDate -> Right _)) = SCDate
+  infer (String  value                ) = SCEnum $ Set.singleton value
 ```
 
 Then whenever unifying the `String` constraint:
-```haskell
-instance Semigroup TStringConstraint where
-  TSCDate   <> TSCEnum _ = TSCAny
-  TSCEnum a <> TSCEnum b | length a + length b < 10 = TSCEnum (a <> b)
-  TSCEnum a <> TSCEnum b                            = TSCAny
+```{.haskell #basic-constraints}
+instance Semigroup StringConstraint where
+  SCDate   <> SCEnum _                            = SCAny
+  SCEnum a <> SCEnum b | length a + length b < 10 = SCEnum (a <> b)
+  SCEnum a <> SCEnum b                            = SCAny
 
-instance Monoid TStringConstraint where
+instance Monoid StringConstraint where
   mappend = (<>)
-  mempty  = TSCNA
+  mempty  = SCNA
+
+instance Semilattice StringConstraint where
+  bottom = SCNever
+  top    = SCAny
 ```
 
 Analogically we may infer for integer constraints^[Program makes it optional `--infer-int-ranges`.] as:
-```haskell
-data TIntConstraint = TRange Int Int
+```{.haskell #basic-constraints}
+data IntConstraint = IntRange Int Int
+                   | IntNever
+                   | IntAny
+  deriving (Show, Eq)
+
+instance Semigroup IntConstraint where
+  IntAny       <> _            = IntAny
+  IntNever     <> a            = a
+  a            <> IntNever     = a
+  IntRange a b <> IntRange c d = IntRange (min a c) (max b d)
+
+instance Semilattice IntConstraint where
+  bottom = IntNever
+  top    = IntAny
+
+instance Monoid IntConstraint where
+  mempty = bottom
 ```
+
+JavaScript has one number type that holds both `Float` and `Int`, so JSON inherits that:
+```{.haskell #basic-constraints}
+data NumberConstraint =
+    NCInt
+  | NCNever
+  | NCFloat
+```
+
+#### Variants
 
 Variant fields for union types are also simple, we implement them with a cousin of `Either` type
 that assumes these types are exclusive:
@@ -253,7 +293,7 @@ instance (FromJSON  a
 In other words for `Int :|: String` type we first check if the value is `String`, and if it fails try to parse it as `String`.
 
 Variant records are a bit more complicated, since it is unclear which typing is better:
-```javascript {file=test/example1a.json}
+```json {file=test/example1a.json}
 {"message": "Where can I submit my proposal?", "uid" : 1014}
 {"error"  : "Authorization failed",            "code" : 401}
 ```
@@ -280,7 +320,7 @@ are matching. And then compare it to type complexity (with optionalities being m
 In this case latter definition has only one choice (optionality), but we only have two samples to begin with.
 
 Assuming we have more samples, the pattern emerges:
-```javascript {file=test/example1b.json}
+```json {file=test/example1b.json}
 {"error"  : "Authorization failed",            "code":  401}
 {"message": "Where can I submit my proposal?", "uid" : 1014}
 {"message": "Sent it to HotCRP",               "uid" :   93}
@@ -434,19 +474,25 @@ Thus we derive types that are valid with respect to specification, and thus give
 from the input.
 
 ```{.haskell file=src/Unions.hs .hidden}
-{-# language ScopedTypeVariables   #-}
-{-# language TypeOperators         #-}
-{-# language ViewPatterns          #-}
-{-# language DuplicateRecordFields #-}
+{-# language ScopedTypeVariables    #-}
+{-# language TypeOperators          #-}
+{-# language TypeSynonymInstances   #-}
+{-# language FlexibleInstances      #-}
+{-# language ViewPatterns           #-}
+{-# language DuplicateRecordFields  #-}
+{-# language MultiParamTypeClasses  #-}
+{-# language FunctionalDependencies #-}
 module Main where
 
 import           Data.Aeson
 import qualified Data.Set as Set
 import           Data.Set(Set)
+import qualified Data.Map as Map
 import           GHC.Generics(Generic)
 
 <<typeclass>>
 <<freetype>>
+<<basic-constraints>>
 <<type>>
 ```
 
@@ -460,6 +506,7 @@ spec = do
     property "law of class Types" $ class_law_types @(FreeType Value)
   describe "JSON types" $ do
     property "law of class Types" $ class_law_types @JSONType
+
 ```
 
 # Bibliography
