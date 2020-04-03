@@ -40,7 +40,8 @@ class (Monoid      ty
   check :: ty   -> term -> Bool
 
 class_law_types :: Types ty term => term -> Bool
-class_law_types term = check (infer term) term
+class_law_types (term :: term) =
+  (check :: Types ty term => ty -> term -> Bool) ((infer :: Types ty term => term -> ty) term) term
 ```
 
 Please note that our type is a _bounded join-semilattice_
@@ -474,7 +475,9 @@ Thus we derive types that are valid with respect to specification, and thus give
 from the input.
 
 ```{.haskell file=src/Unions.hs .hidden}
+{-# language AllowAmbiguousTypes    #-}
 {-# language ScopedTypeVariables    #-}
+{-# language TypeApplications       #-}
 {-# language TypeOperators          #-}
 {-# language TypeSynonymInstances   #-}
 {-# language FlexibleInstances      #-}
@@ -482,7 +485,7 @@ from the input.
 {-# language DuplicateRecordFields  #-}
 {-# language MultiParamTypeClasses  #-}
 {-# language FunctionalDependencies #-}
-module Main where
+module Unions where
 
 import           Data.Aeson
 import qualified Data.Set as Set
