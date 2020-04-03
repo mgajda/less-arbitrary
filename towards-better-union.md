@@ -153,7 +153,7 @@ Now let's give some motivating examples from realm of JSON API types:
     - `{"error"   : "Authorization failed",            "code" :  401}`
 
 5. Arrays in place of records^[Which strikes author as a bad practice, but we want to handle it nevertheless. Possible with `--bad-array-records` option.]:
-```json {file=example5.json}
+```javascript {file=example5.json}
 [
   [1, "Nick",    null       ]
 , [2, "George", "2019-04-11"]
@@ -162,7 +162,7 @@ Now let's give some motivating examples from realm of JSON API types:
 ```
 
 6. Maps of identical objects:
-```json {file=test/example6.json}
+```javascript {file=test/example6.json}
 {
     "6408f5": {
         "size": 969709,
@@ -253,7 +253,7 @@ instance (FromJSON  a
 In other words for `Int :|: String` type we first check if the value is `String`, and if it fails try to parse it as `String`.
 
 Variant records are a bit more complicated, since it is unclear which typing is better:
-```json {file=test/example1a.json}
+```javascript {file=test/example1a.json}
 {"message": "Where can I submit my proposal?", "uid" : 1014}
 {"error"  : "Authorization failed",            "code" : 401}
 ```
@@ -265,6 +265,7 @@ data OurRecord =
             , code    :: Maybe Int
             , uid     :: Maybe Int }
 ```
+
 Or maybe:
 ```haskell
 data OurRecord2 = Message { message :: String
@@ -279,7 +280,7 @@ are matching. And then compare it to type complexity (with optionalities being m
 In this case latter definition has only one choice (optionality), but we only have two samples to begin with.
 
 Assuming we have more samples, the pattern emerges:
-```json {file=test/example1b.json}
+```javascript {file=test/example1b.json}
 {"error"  : "Authorization failed",            "code":  401}
 {"message": "Where can I submit my proposal?", "uid" : 1014}
 {"message": "Sent it to HotCRP",               "uid" :   93}
@@ -432,7 +433,7 @@ and makes output less redundant.
 Thus we derive types that are valid with respect to specification, and thus give the best information
 from the input.
 
-```{.haskell file=Unions.hs .hidden}
+```{.haskell file=src/Unions.hs .hidden}
 {-# language ScopedTypeVariables   #-}
 {-# language TypeOperators         #-}
 {-# language ViewPatterns          #-}
@@ -447,6 +448,18 @@ import           GHC.Generics(Generic)
 <<typeclass>>
 <<freetype>>
 <<type>>
+```
+
+```{.haskell file=test/Spec.hs}
+import Test.Hspec
+
+main = hspec spec
+
+spec = do
+  describe "Free types" $ do
+    property "law of class Types" $ class_law_types @(FreeType Value)
+  describe "JSON types" $ do
+    property "law of class Types" $ class_law_types @JSONType
 ```
 
 # Bibliography
