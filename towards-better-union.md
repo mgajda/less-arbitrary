@@ -30,23 +30,11 @@ acks: |
 
 ---
 
-```{.haskell .hidden}
-{-# language ScopedTypeVariables   #-}
-{-# language TypeOperators         #-}
-{-# language ViewPatterns          #-}
-{-# language DuplicateRecordFields #-}
-module Main where
-
-import           Data.Aeson
-import qualified Data.Set as Set
-import           Data.Set(Set)
-import           GHC.Generics(Generic)
-
-```
 Minimal definition of the type^[We describe laws as QuickCheck properties for convenience.]:
 
-```haskell
-class Monoid ty
+```{.haskell #typeclass}
+class (Monoid      ty
+      ,Semilattice ty)
    => ty `Types` term | ty -> term where
   infer ::         term -> ty
   check :: ty   -> term -> Bool
@@ -55,16 +43,12 @@ class_law_types :: Types ty term => term -> Bool
 class_law_types term = check (infer term) term
 ```
 
-Please note that our type is a _join-semilattice_
+Please note that our type is a _bounded join-semilattice_
 (since it always allows union of two different types):
-```
+```haskell
 class Monoid ty
    => Semilattice ty where
    bottom, top :: ty
-
-class ty `Types` term where
-  infer ::       term -> ty
-  check :: ty -> term -> Bool
 ```
 Here `bottom` stands for no value permitted (empty term,
   without even a `null`).
@@ -74,7 +58,7 @@ Here `bottom` stands for no value permitted (empty term,
 Note that `Monoid` operation is a type unification.
 
 Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
-```
+```{.haskell file=Aeson.hs}
 data Value =
     Object Object
   | Array  Array
@@ -84,21 +68,9 @@ data Value =
   | Null
 ```
 
-
 Now for a term with constructors we can infer "free" type for every term:
-```
-data family FreeType :: * -> *
-
-data FreeType Value =
-    TObj Map.Map String FreeType
-  | TArr [FreeType]
-  | TString StringConstraint
-  | TNumber NumberConstraint
-
-```
-
-In other words, for any `T` value type Set T` satisfies our notion of _free type_, with:
-```{.haskell}
+For any `T` value type Set T` satisfies our notion of _free type_.
+```{.haskell #freetype}
 newtype FreeType a = FreeType { captured :: Set a }
 
 instance Monoid FreeType where
@@ -109,6 +81,18 @@ instance FreeType `Types` Value where
   infer = FreeType . Set.singleton
   check = flip Set.member . captured
 ```
+
+Law just assert that the following diagram commutes:
+```dot { width=45% height=14% #fig:type-commutes }
+digraph type {
+  node [shape=plain];
+  Value -> Type [label="infer"];
+  Type -> Bool [label="check with value"];
+  Value -> Bool [label="const True"];
+}
+```
+It is convenient validation when testing a recursive structure of the type.
+
 This definition is sound, and for a finite realm of values, may make a sense.
 For example for a set of inputs^[Conforming to Haskell and JSON syntax, we use list for marking the elements of the set.]:
 `["yes", "no", "error"]`, we might reasonably say that type is indeed
@@ -143,6 +127,14 @@ Aiming for this, we set the rules of type design:
   by `T x y`,
   then `X :: x` and `Y :: y` must be also a valid typing.
 
+```{.haskell #type}
+data UnionType =
+    TObj Map.Map String FreeType
+  | TArr [FreeType]
+  | TString StringConstraint
+  | TNumber NumberConstraint
+```
+
 ## JSON examples
 
 Now let's give some motivating examples from realm of JSON API types:
@@ -161,7 +153,7 @@ Now let's give some motivating examples from realm of JSON API types:
     - `{"error"   : "Authorization failed",            "code" :  401}`
 
 5. Arrays in place of records^[Which strikes author as a bad practice, but we want to handle it nevertheless. Possible with `--bad-array-records` option.]:
-```{.json}
+```json {file=example5.json}
 [
   [1, "Nick",    null       ]
 , [2, "George", "2019-04-11"]
@@ -170,25 +162,25 @@ Now let's give some motivating examples from realm of JSON API types:
 ```
 
 6. Maps of identical objects:
-```
+```json {file=test/example6.json}
 {
-    "0000000000000000000e222e4e7afc29c49f6398783a94c846dee2e13c6408f5": {
+    "6408f5": {
         "size": 969709,
         "height": 510599,
         "difficulty": 3007383866429.732,
-        "previous": "000000000000000000552a7783efd39eaa1c5ff6789e21a0bbe7547bc454fced"
+        "previous": "54fced"
 	},
-	"000000000000000000552a7783efd39eaa1c5ff6789e21a0bbe7547bc454fced": {
+	"54fced": {
 	    "size": 991394,
         "height": 510598,
         "difficulty": 3007383866429.732,
-        "previous": "00000000000000000043aba4c065d4d92aec529566287ebec5fe9010246c9589"
+        "previous": "6c9589"
 	},
-	"00000000000000000043aba4c065d4d92aec529566287ebec5fe9010246c9589": {
+	"6c9589": {
         "size": 990527,
         "height": 510597,
         "difficulty": 3007383866429.732,
-        "previous": "00000000000000000009025b9e95911a4dc050de129ea4eb5e40ef280751a0cb"
+        "previous": "51a0cb"
 	}
 }
 ```
@@ -261,9 +253,9 @@ instance (FromJSON  a
 In other words for `Int :|: String` type we first check if the value is `String`, and if it fails try to parse it as `String`.
 
 Variant records are a bit more complicated, since it is unclear which typing is better:
-```
-{"message" : "Where can I submit my proposal?", "uid" : 1014}
-{"error" : "Authorization failed", "code" : 401}
+```json {file=test/example1a.json}
+{"message": "Where can I submit my proposal?", "uid" : 1014}
+{"error"  : "Authorization failed",            "code" : 401}
 ```
 
 ```haskell
@@ -277,8 +269,8 @@ Or maybe:
 ```haskell
 data OurRecord2 = Message { message :: String
                           , uid     :: Int }
-                | Error { error :: String
-                        , code :: Int }
+                | Error   { error   :: String
+                          , code    :: Int }
 ```
 
 The best attempt here, is to rely on our examples being reasonable exhaustive.
@@ -287,12 +279,12 @@ are matching. And then compare it to type complexity (with optionalities being m
 In this case latter definition has only one choice (optionality), but we only have two samples to begin with.
 
 Assuming we have more samples, the pattern emerges:
-```json
-{"error" : "Authorization failed", "code" : 401}
-{"message" : "Where can I submit my proposal?", "uid" : 1014}
-{"message" : "Sent it to HotCRP", "uid" : 93}
-{"message" : "Thanks!", "uid" : 1014}
-{"error" : "Authorization failed", "code" : 401}
+```json {file=test/example1b.json}
+{"error"  : "Authorization failed",            "code":  401}
+{"message": "Where can I submit my proposal?", "uid" : 1014}
+{"message": "Sent it to HotCRP",               "uid" :   93}
+{"message": "Thanks!",                         "uid" : 1014}
+{"error"  : "Missing user",                    "code":  404}
 ```
 
 ### Selecting basic priors
@@ -302,7 +294,7 @@ as prior selection, let's state some obvious rules
 for the typing:
 
 1. We generalize basic datatypes:
-```{.haskell}
+```{.haskell #json-types-instance}
 instance JSONType `Types` Value where
     infer (Bool _) = bottom { bool = True }
     infer (Int  _) = bottom { int  = True }
@@ -315,9 +307,9 @@ Thus `bottom` indicates _no type and no value_.
 The `top` of our semilattice is the type of any `Value` term.
 
 2. We allow for unification of basic types, by typewise unification:
-```
-infer (TUnion { bool, int,  :: TPresent
-              })
+```{.haskell #json-types-instance}
+    infer (TUnion { bool, int,  :: TPresent
+                  })
 ```
 
 ### Dealing with conflicting alternatives
@@ -341,7 +333,7 @@ or the mapping from hash to a single object type.
 
 How can we make sure that we have a right number of samples?
 This is another example:
-```
+```json
 {"samples" : [
     {"error"   : "Authorization failed",            "code" :  401}
   , {"message" : "Where can I submit my proposal?", "uid"  : 1014}
@@ -358,16 +350,32 @@ of inferred records, and attempt to minimize the term.
 
 Next is detection of similarities between type descriptions developed
 for different parts of the term:
-```
-{"samples" : ...
-."last_message": {"message": "Thanks!", "uid" : 1014}
+```json
+{"samples"      :  ...,
+ "last_message" : {"message": "Thanks!", "uid" : 1014}
 }
 ```
 
-```dot
+```dot { width=45% height=14% #fig:dataflow }
 digraph {
+  margin=0;
   node [shape=box,color=white];
   rankdir=LR;
+  subgraph g1 {
+    "JSON Value";
+    "Free type";
+    rank=same;
+  }
+  subgraph g2 {
+    "Local generalization";
+    "Match similar";
+    rank=same;
+  }
+  subgraph g3 {
+    "Unify similar";
+    "Produce type";
+    rank=same;
+  }
   "JSON Value" -> "Free type" -> "Local generalization" -> "Match similar" -> "Unify similar" -> "Produce type";
 }
 ```
@@ -424,14 +432,21 @@ and makes output less redundant.
 Thus we derive types that are valid with respect to specification, and thus give the best information
 from the input.
 
-# Appendix
+```{.haskell file=Unions.hs .hidden}
+{-# language ScopedTypeVariables   #-}
+{-# language TypeOperators         #-}
+{-# language ViewPatterns          #-}
+{-# language DuplicateRecordFields #-}
+module Main where
 
-Final `JSONType`:
-```haskell
-data JSONType =
-  JSONType { bool, int, null :: Bool
-           , stringConstraint :: StringConstraint
-           }
+import           Data.Aeson
+import qualified Data.Set as Set
+import           Data.Set(Set)
+import           GHC.Generics(Generic)
+
+<<typeclass>>
+<<freetype>>
+<<type>>
 ```
 
 # Bibliography
