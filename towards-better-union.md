@@ -512,7 +512,7 @@ import           Data.Function
 import           Data.Proxy
 import           Data.Text(Text)
 import qualified Data.Text as Text
-import qualified Data.Set as Set
+import qualified Data.Set  as Set
 import           Data.Set(Set)
 import qualified Data.Map as Map
 import           GHC.Generics(Generic)
@@ -526,16 +526,18 @@ parseDate :: Text -> Either String _
 parseDate = undefined -- FIXME
 ```
 
-```{.haskell file=test/Spec.hs}
+```{.haskell file=test/Spec.hs .hidden}
+import Data.Aeson
 import Test.Hspec
+import Unions
 
 main = hspec spec
 
 spec = do
   describe "Free types" $ do
-    property "law of class Types" $ class_law_types @(FreeType Value)
+    property "law of class Types" $ class_law_types (Proxy :: FreeType Value)
   describe "JSON types" $ do
-    property "law of class Types" $ class_law_types @JSONType
+    property "law of class Types" $ class_law_types (Proxy :: JSONType)
 
 ```
 

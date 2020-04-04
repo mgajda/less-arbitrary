@@ -16,3 +16,9 @@ library:
   source-dirs: src
   exposed-modules:
   - Unions
+tests:
+  spec:
+    main: Spec.hs
+    source-dirs: test
+    dependencies:
+      - hspec
