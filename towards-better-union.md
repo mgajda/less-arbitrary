@@ -60,7 +60,8 @@ infer_ _ = infer
 
 ```
 
-Please note that our type is a _bounded join-semilattice_
+Please note that any union type defined in such way
+is a _bounded meet-semilattice_
 (since it always allows union of two different types):
 
 ``` {.haskell #typeclass}
@@ -69,9 +70,11 @@ class Monoid ty
    bottom, top :: ty
 ```
 Here `bottom` stands for no value permitted (empty term,
-  without even a `null`).
+  without even a `null`, or **no information** about possible value).
   For example an empty array `[]` could be typed
-  as a array type with `bottom` elements.
+  as a array type with `bottom` element type.
+Naturally `top` represent **everything permitted**
+or fully dynamic value.
 
 Law asserts that the following diagram commutes:
 
@@ -162,18 +165,62 @@ Aiming for this, we set the rules of type design:
   by `T x y`,
   then `X :: x` and `Y :: y` must be also a valid typing.
 
+Since we have a union of just few possible constraints,
+we make it a record for easier processing:
+
+Note that given constraints for different type
+constructors, union type can be though of
+as almost generic:
+
 ```{.haskell #type}
 
 data UnionType =
   UnionType {
-    unionBool   :: Maybe ()
+    unionNull   :: Bool
+  , unionBool   :: Bool
   , unionInt    :: IntConstraint
   , unionString :: StringConstraint
   -- FIXME:
-  , unionObj    :: Map.Map String UnionType
-  , unionArr    :: [UnionType]
+  , unionObj    :: ObjectConstraint
+  , unionArr    :: ArrayConstraint
   }
   --deriving (Eq,Show,Generic)
+
+instance Semigroup UnionType where
+  u1 <> u2 =
+    UnionType {
+      unionNull   = ((||) `on` unionNull  ) u1 u2
+    , unionBool   = ((||) `on` unionBool  ) u1 u2
+    , unionInt    = ((<>) `on` unionInt   ) u1 u2
+    , unionString = ((<>) `on` unionString) u1 u2
+    , unionObj    = ((<>) `on` unionObj   ) u1 u2
+    , unionArr    = ((<>) `on` unionArr   ) u1 u2
+    }
+
+instance Monoid UnionType where
+  mempty = bottom
+
+instance Semilattice UnionType where
+  bottom = UnionType {
+      unionNull   = False
+    , unionBool   = False
+    , unionInt    = bottom
+    , unionString = bottom
+    , unionObj    = bottom
+    , unionArr    = bottom
+    }
+  top = UnionType {
+      unionNull   = True
+    , unionBool   = True
+    , unionInt    = top
+    , unionString = top
+    , unionObj    = top
+    , unionArr    = top
+    }
+
+instance UnionType `Types` Value where
+  infer = undefined -- FIXME
+  check = undefined -- FIXME
 ```
 
 ## Motivating examples
@@ -388,9 +435,13 @@ for the typing:
 
 1. We generalize basic datatypes:
 ```{.haskell #json-types-instance}
-instance JSONType `Types` Value where
-    infer (Bool _) = bottom { bool = True }
-    infer (Int  _) = bottom { int  = True }
+
+instance SemiLattice UnionType where
+  bottom = undefined
+
+instance UnionType `Types` Value where
+    infer (Bool _) = bottom { unionBool = True }
+    infer (Int  i) = bottom { unionInt  = infer i }
     infer  Null    = bottom { null = True }
     -- ...
 ```
@@ -453,6 +504,33 @@ for different parts of the term:
  "last_message" : {"message": "Thanks!",
                       "uid" : 1014}
 }
+```
+
+```{.haskell #array-constraint}
+
+data ArrayConstraint  = ArrayConstraint
+
+instance Semigroup ArrayConstraint where
+  _ <> _ = ArrayConstraint -- FIXME
+
+instance Monoid ArrayConstraint where
+  mempty = ArrayConstraint -- FIXME
+
+instance Semilattice ArrayConstraint where
+  bottom = ArrayConstraint
+  top = ArrayConstraint
+
+data ObjectConstraint = ObjectConstraint
+
+instance Semigroup ObjectConstraint where
+  _ <> _ = ObjectConstraint -- FIXME
+
+instance Monoid ObjectConstraint where
+  mempty = ObjectConstraint -- FIXME
+
+instance Semilattice ObjectConstraint where
+  bottom = ObjectConstraint
+  top = ObjectConstraint
 ```
 
 ``` { .dot width=33% height=14% #fig:dataflow }
@@ -573,7 +651,6 @@ in the future.
 {-# language PartialTypeSignatures  #-}
 module Unions where
 
-import           Algebra.Lattice
 import           Data.Aeson
 import           Data.Either
 import           Data.Function
@@ -588,6 +665,8 @@ import           GHC.Generics(Generic)
 <<typeclass>>
 <<freetype>>
 <<basic-constraints>>
+<<array-constraint>>
+<<object-constraint>>
 <<type>>
 
 parseDate :: Text -> Either String _
@@ -596,19 +675,26 @@ parseDate = undefined -- FIXME
 
 ```{.haskell file=test/Spec.hs .hidden}
 import Data.Aeson
+import Data.Proxy
 import Test.Hspec
+import Test.Hspec.QuickCheck
+import Test.QuickCheck
 import Unions
+
+instance Ord Value
+instance Arbitrary Value
 
 main = hspec spec
 
 spec = do
   describe "Free types" $ do
-    property "law of class Types" $
-      class_law_types (Proxy :: FreeType Value)
+    prop "law of class Types" $
+      class_law_types (Proxy :: Proxy (FreeType Value))
   describe "JSON types" $ do
-    property "law of class Types" $
-      class_law_types (Proxy :: JSONType)
+    prop "law of class Types" $
+      class_law_types (Proxy :: Proxy UnionType)
 
 ```
+
 
 # Bibliography
