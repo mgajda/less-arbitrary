@@ -13,6 +13,7 @@ dependencies:
 - containers
 - text
 - validity
+- lattices
 library:
   source-dirs: src
   exposed-modules:
