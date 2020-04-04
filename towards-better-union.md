@@ -96,11 +96,15 @@ instance (Ord a, Eq a) => FreeType a `Types` a where
   check (FreeType s) term  = term `Set.member` s
 ```
 
-Law just assert that the following diagram commutes:
+Law asserts that the following diagram commutes:
 ```dot { width=45% height=14% #fig:type-commutes }
 digraph type {
-  node [shape=plain];
-  Value -> Type [label="infer"];
+  node [shape=box,color=white];
+  subgraph g {
+    Bool; Type;
+    rank=same;
+  }
+  Value -> Type [xlabel="infer"];
   Type -> Bool [label="check with value"];
   Value -> Bool [label="const True"];
 }
