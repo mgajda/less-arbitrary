@@ -12,6 +12,7 @@ dependencies:
 - aeson
 - containers
 - text
+- validity
 library:
   source-dirs: src
   exposed-modules:

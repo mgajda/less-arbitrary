@@ -32,7 +32,7 @@ acks: |
 
 Minimal definition of the type^[We describe laws as QuickCheck properties for convenience.]:
 
-```{.haskell #typeclass}
+``` {.haskell #typeclass}
 class (Monoid      ty
       ,Semilattice ty)
    => ty `Types` term | ty -> term where
@@ -48,11 +48,13 @@ check_ :: ty `Types` term => Proxy ty -> ty -> term -> Bool
 check_ _ = check
 infer_ :: ty `Types` term => Proxy ty ->       term -> ty
 infer_ _ = infer
+
 ```
 
 Please note that our type is a _bounded join-semilattice_
 (since it always allows union of two different types):
-```{.haskell #typeclass}
+
+``` {.haskell #typeclass}
 class Monoid ty
    => Semilattice ty where
    bottom, top :: ty
@@ -65,7 +67,7 @@ Here `bottom` stands for no value permitted (empty term,
 Note that `Monoid` operation is a type unification.
 
 Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
-```{.haskell file=Aeson.hs}
+``` {.haskell file=Aeson.hs}
 data Value =
     Object Object
   | Array  Array
@@ -77,7 +79,7 @@ data Value =
 
 Now for a term with constructors we can infer "free" type for every term:
 For any `T` value type Set T` satisfies our notion of _free type_.
-```{.haskell #freetype}
+``` { .haskell #freetype }
 data FreeType a = FreeType { captured :: Set a }
                 | Full
 
@@ -97,7 +99,8 @@ instance (Ord a, Eq a) => FreeType a `Types` a where
 ```
 
 Law asserts that the following diagram commutes:
-```dot { width=45% height=14% #fig:type-commutes }
+
+``` { .dot width=45% height=20% #fig:type-commutes }
 digraph type {
   node [shape=box,color=white];
   subgraph g {
@@ -105,10 +108,11 @@ digraph type {
     rank=same;
   }
   Value -> Type [xlabel="infer"];
-  Type -> Bool [label="check with value"];
+  Type  -> Bool [label="check with value"];
   Value -> Bool [label="const True"];
 }
 ```
+
 It is convenient validation when testing a recursive structure of the type.
 
 This definition is sound, and for a finite realm of values, may make a sense.
@@ -177,7 +181,7 @@ Now let's give some motivating examples from realm of JSON API types:
     - `{"error"   : "Authorization failed",            "code" :  401}`
 
 5. Arrays in place of records^[Which strikes author as a bad practice, but we want to handle it nevertheless. Possible with `--bad-array-records` option.]:
-```json {file=example5.json}
+``` {.json file=example5.json}
 
 [
   [1, "Nick",    null       ]
@@ -187,7 +191,7 @@ Now let's give some motivating examples from realm of JSON API types:
 ```
 
 6. Maps of identical objects:
-```json {file=test/example6.json}
+``` { .json file=test/example6.json }
 {
     "6408f5": {
         "size": 969709,
@@ -237,15 +241,17 @@ and likelihood of their occurence.
 1. Given a sample of values, we can have a reasonable approximation of expected values:
   - use `String` versus `Int` outright, instead of any JSON `Value`.
   - assuming that we have a set of parsers that are mutually exclusive, we can implement this for `String` values:
-```{.haskell #basic-constraints}
-data StringConstraint = SCDate
-                      | SCEnum (Set Text)
-                      | SCNever -- never seen any sample
-                      | SCAny
+``` {.haskell #basic-constraints}
+data StringConstraint =
+    SCDate
+  | SCEnum (Set Text)
+  | SCNever
+  | SCAny
 
 instance StringConstraint `Types` Text where
   infer (parseDate -> Right _) = SCDate
-  infer  value                 = SCEnum $ Set.singleton value
+  infer  value                 = SCEnum $
+                      Set.singleton value
 
   check  SCDate     s = isRight $ parseDate s
   check (SCEnum vs) s = s `Set.member` vs
@@ -256,9 +262,10 @@ instance StringConstraint `Types` Text where
 Then whenever unifying the `String` constraint:
 ```{.haskell #basic-constraints}
 instance Semigroup StringConstraint where
-  SCDate     <> (SCEnum _)                            = SCAny
-  (SCEnum a) <> (SCEnum b) | length a + length b < 10 = SCEnum (a <> b)
-  (SCEnum a) <> (SCEnum b)                            = SCAny
+  SCDate     <> (SCEnum _)     = SCAny
+  (SCEnum a) <> (SCEnum b)
+    | length a + length b < 10 = SCEnum (a <> b)
+  (SCEnum a) <> (SCEnum b)     = SCAny
 
 instance Monoid StringConstraint where
   mappend = (<>)
@@ -280,7 +287,8 @@ instance Semigroup IntConstraint where
   IntAny       <> _            = IntAny
   IntNever     <> a            = a
   a            <> IntNever     = a
-  IntRange a b <> IntRange c d = IntRange (min a c) (max b d)
+  IntRange a b <> IntRange c d =
+                  IntRange (min a c) (max b d)
 
 instance Semilattice IntConstraint where
   bottom = IntNever
@@ -316,9 +324,12 @@ instance (FromJSON  a
 In other words for `Int :|: String` type we first check if the value is `String`, and if it fails try to parse it as `String`.
 
 Variant records are a bit more complicated, since it is unclear which typing is better:
-```json {file=test/example1a.json}
-{"message": "Where can I submit my proposal?", "uid" : 1014}
-{"error"  : "Authorization failed",            "code" : 401}
+
+```{.json .javascript file=test/example1a.json}
+{"message": "Where can I submit my proposal?",
+    "uid" : 1014}
+{"error"  : "Authorization failed",
+   "code" : 401}
 ```
 
 ```haskell
@@ -343,12 +354,17 @@ are matching. And then compare it to type complexity (with optionalities being m
 In this case latter definition has only one choice (optionality), but we only have two samples to begin with.
 
 Assuming we have more samples, the pattern emerges:
-```json {file=test/example1b.json}
-{"error"  : "Authorization failed",            "code":  401}
-{"message": "Where can I submit my proposal?", "uid" : 1014}
-{"message": "Sent it to HotCRP",               "uid" :   93}
-{"message": "Thanks!",                         "uid" : 1014}
-{"error"  : "Missing user",                    "code":  404}
+```{.json file=test/example1b.json}
+{"error"  : "Authorization failed",
+    "code":  401}
+{"message": "Where can I submit my proposal?",
+    "uid" : 1014}
+{"message": "Sent it to HotCRP",
+    "uid" :   93}
+{"message": "Thanks!",
+    "uid" : 1014}
+{"error"  : "Missing user",
+    "code":  404}
 ```
 
 ### Selecting basic priors
@@ -399,11 +415,16 @@ How can we make sure that we have a right number of samples?
 This is another example:
 ```json
 {"samples" : [
-    {"error"   : "Authorization failed",            "code" :  401}
-  , {"message" : "Where can I submit my proposal?", "uid"  : 1014}
-  , {"message" : "Sent it to HotCRP",               "uid"  :   93}
-  , {"message" : "Thanks!",                         "uid"  : 1014}
-  , {"error"   : "Authorization failed",            "code" :  401}
+    {"error"   : "Authorization failed",
+        "code" :  401}
+  , {"message" : "Where can I submit my proposal?",
+        "uid"  : 1014}
+  , {"message" : "Sent it to HotCRP",
+        "uid"  :   93}
+  , {"message" : "Thanks!",
+        "uid"  : 1014}
+  , {"error"   : "Authorization failed",
+        "code" :  401}
   ]
 }
 ```
@@ -416,11 +437,12 @@ Next is detection of similarities between type descriptions developed
 for different parts of the term:
 ```json
 {"samples"      :  ...,
- "last_message" : {"message": "Thanks!", "uid" : 1014}
+ "last_message" : {"message": "Thanks!",
+                      "uid" : 1014}
 }
 ```
 
-```dot { width=45% height=14% #fig:dataflow }
+``` { .dot width=33% height=14% #fig:dataflow }
 digraph {
   margin=0;
   node [shape=box,color=white];
@@ -539,9 +561,11 @@ main = hspec spec
 
 spec = do
   describe "Free types" $ do
-    property "law of class Types" $ class_law_types (Proxy :: FreeType Value)
+    property "law of class Types" $
+      class_law_types (Proxy :: FreeType Value)
   describe "JSON types" $ do
-    property "law of class Types" $ class_law_types (Proxy :: JSONType)
+    property "law of class Types" $
+      class_law_types (Proxy :: JSONType)
 
 ```
 
