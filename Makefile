@@ -32,6 +32,7 @@ offset-array-example.eps: offset-array-example.svg
 #SRC_PLOTS=${wildcard plots/*.gnuplot}
 #IMG_PLOTS=${subst plots/,out/,${SRC_PLOTS:.gnuplot=.svg} } ${PICS}
 IMG_PLOTS=
+BIBLIO=${NAME}.bib
 
 out/%.svg: plots/%.gnuplot plots/%.csv
 	$(GNUPLOT) $< > $@
@@ -40,21 +41,21 @@ debug.out:
 	pandoc ${OPTIONS} \
 		-t json -o debug.json ${SRC}
 
-${TEX}: ${IMG_PLOTS} ${SRC} ${TEMPLATE}
+${TEX}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${BIBLIO}
 	pandoc ${OPTIONS} \
 		--template=${TEMPLATE}			\
 		--csl=templates/acm-sig-proceedings.csl	\
 		--standalone \
 		-o ${TEX} ${SRC}
 
-${PDF}: ${IMG_PLOTS} ${SRC} ${TEMPLATE}
+${PDF}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${BIBLIO}
 	pandoc ${OPTIONS} \
 		--template=${TEMPLATE}		\
 		--pdf-engine=xelatex		\
 		-o ${PDF} ${SRC}
 #	--csl=templates/acm-sig-proceedings.csl	\
 
-${HTML}: ${IMG_PLOTS} ${SRC}
+${HTML}: ${IMG_PLOTS} ${SRC} ${BIBLIO}
 	pandoc ${OPTIONS}		\
 		--standalone		\
 		--css=templates/pandoc.css	\
