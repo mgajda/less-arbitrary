@@ -28,9 +28,12 @@ acks: |
 
   Author thanks for all tap-on-the-back donations to his past projects.
 
+  The text was prepared with great help of bidirectional literate programming[@literate-programming] tool[@entangled],
+  Pandoc[@pandoc] markdown publishing system and live feedback from GHCid[@ghcid].
+
 ---
 
-Minimal definition of the type^[We describe laws as QuickCheck properties for convenience.]:
+Minimal definition of the type^[We describe laws as QuickCheck[@quickcheck] properties for convenience.]:
 
 ``` {.haskell #typeclass}
 class (Monoid      ty
@@ -513,10 +516,38 @@ of relying on automation.
 We found that this greatly decreases complexity of the types,
 and makes output less redundant.
 
+## Related work
+
+F# type providers for JSON allow to automatically
+derive schema, but the type system is
+_ad-hoc_[@type-providers-f-sharp].
+There was attempt to automatically infer schemas
+also in the PADS project [@pads],
+but it does not provide a generalized type system
+design methodology.
+There is a program called [@quicktype] that
+tries to derive types with the Markov chains
+but its cost requires much more engineering
+time since unit tests are case-by-case,
+and there is no little underlying theory.
+
 ## Conclusion
 
-Thus we derive types that are valid with respect to specification, and thus give the best information
+We derive types that are valid with respect
+to specification, and thus give the best information
 from the input.
+
+We also propose a union type system engineering
+methodology, justifying it by theoretical criteria,
+and showing that it consistently explains
+our decisions in practice.
+
+We hope that this kind of _formally justified type
+system engineering_ will be more ubiquitous
+in practice, replacing _ad-hoc_ approaches
+in the future.
+
+## Appendix
 
 ```{.haskell file=src/Unions.hs .hidden}
 {-# language AllowAmbiguousTypes    #-}
@@ -532,6 +563,7 @@ from the input.
 {-# language PartialTypeSignatures  #-}
 module Unions where
 
+import           Algebra.Lattice
 import           Data.Aeson
 import           Data.Either
 import           Data.Function
