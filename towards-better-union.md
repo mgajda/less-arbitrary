@@ -33,6 +33,8 @@ acks: |
 
 ---
 
+If inference fails, we can always correct it by adding additional example.
+
 Minimal definition of the type^[We describe laws as QuickCheck[@quickcheck] properties for convenience.]:
 
 ``` {.haskell #typeclass}
@@ -547,7 +549,7 @@ system engineering_ will be more ubiquitous
 in practice, replacing _ad-hoc_ approaches
 in the future.
 
-## Appendix
+# Appendix
 
 ```{.haskell file=src/Unions.hs .hidden}
 {-# language AllowAmbiguousTypes    #-}
@@ -602,4 +604,3 @@ spec = do
 ```
 
 # Bibliography
-If inference fails, we can always correct it by adding additional example.
