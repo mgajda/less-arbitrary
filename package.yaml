@@ -1,0 +1,18 @@
+name: union-types
+version: '0.1.0.0'
+category: Web
+author: Michal J. Gajda
+maintainer: mjgajda@migamake.com
+license: BSD-3
+extra-source-files:
+- CHANGELOG.md
+- README.md
+dependencies:
+- base
+- aeson
+- containers
+- text
+library:
+  source-dirs: src
+  exposed-modules:
+  - Unions

@@ -39,9 +39,15 @@ class (Monoid      ty
   infer ::         term -> ty
   check :: ty   -> term -> Bool
 
-class_law_types :: Types ty term => term -> Bool
-class_law_types (term :: term) =
-  (check :: Types ty term => ty -> term -> Bool) ((infer :: Types ty term => term -> ty) term) term
+class_law_types :: Types ty term => Proxy ty -> term -> Bool
+class_law_types p term =
+  check_ p (infer_ p term) term
+
+
+check_ :: ty `Types` term => Proxy ty -> ty -> term -> Bool
+check_ _ = check
+infer_ :: ty `Types` term => Proxy ty ->       term -> ty
+infer_ _ = infer
 ```
 
 Please note that our type is a _bounded join-semilattice_
@@ -60,7 +66,6 @@ Note that `Monoid` operation is a type unification.
 
 Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
 ```{.haskell file=Aeson.hs}
-{-# LINE 62 "towards-better-union.md" #-}
 data Value =
     Object Object
   | Array  Array
@@ -73,15 +78,22 @@ data Value =
 Now for a term with constructors we can infer "free" type for every term:
 For any `T` value type Set T` satisfies our notion of _free type_.
 ```{.haskell #freetype}
-newtype FreeType a = FreeType { captured :: Set a }
+data FreeType a = FreeType { captured :: Set a }
+                | Full
 
+instance (Ord a, Eq a) => Semigroup (FreeType a) where
+  a <> b = FreeType $ (Set.union `on` captured) a b -- mappend
 instance (Ord a, Eq a) => Monoid (FreeType a) where
-  mappend = Set.union -- mappend
-  mempty  = Set.empty
+  mempty  = FreeType Set.empty
 
-instance (Ord a, Eq a) => FreeType a `Types` Value where
-  infer = FreeType . Set.singleton
-  check = flip Set.member . captured
+instance (Ord a, Eq a) => Semilattice (FreeType a) where
+  bottom = mempty
+  top    = Full
+
+instance (Ord a, Eq a) => FreeType a `Types` a where
+  infer                    = FreeType . Set.singleton
+  check Full         _term = True
+  check (FreeType s) term  = term `Set.member` s
 ```
 
 Law just assert that the following diagram commutes:
@@ -223,24 +235,30 @@ and likelihood of their occurence.
   - assuming that we have a set of parsers that are mutually exclusive, we can implement this for `String` values:
 ```{.haskell #basic-constraints}
 data StringConstraint = SCDate
-                      | SCEnum (Set String)
+                      | SCEnum (Set Text)
                       | SCNever -- never seen any sample
+                      | SCAny
 
-instance StringConstraint `Types` String where
-  infer (String (parseDate -> Right _)) = SCDate
-  infer (String  value                ) = SCEnum $ Set.singleton value
+instance StringConstraint `Types` Text where
+  infer (parseDate -> Right _) = SCDate
+  infer  value                 = SCEnum $ Set.singleton value
+
+  check  SCDate     s = isRight $ parseDate s
+  check (SCEnum vs) s = s `Set.member` vs
+  check  SCNever    _ = False
+  check  SCAny      _ = True
 ```
 
 Then whenever unifying the `String` constraint:
 ```{.haskell #basic-constraints}
 instance Semigroup StringConstraint where
-  SCDate   <> SCEnum _                            = SCAny
-  SCEnum a <> SCEnum b | length a + length b < 10 = SCEnum (a <> b)
-  SCEnum a <> SCEnum b                            = SCAny
+  SCDate     <> (SCEnum _)                            = SCAny
+  (SCEnum a) <> (SCEnum b) | length a + length b < 10 = SCEnum (a <> b)
+  (SCEnum a) <> (SCEnum b)                            = SCAny
 
 instance Monoid StringConstraint where
   mappend = (<>)
-  mempty  = SCNA
+  mempty  = SCNever
 
 instance Semilattice StringConstraint where
   bottom = SCNever
@@ -485,9 +503,15 @@ from the input.
 {-# language DuplicateRecordFields  #-}
 {-# language MultiParamTypeClasses  #-}
 {-# language FunctionalDependencies #-}
+{-# language PartialTypeSignatures  #-}
 module Unions where
 
 import           Data.Aeson
+import           Data.Either
+import           Data.Function
+import           Data.Proxy
+import           Data.Text(Text)
+import qualified Data.Text as Text
 import qualified Data.Set as Set
 import           Data.Set(Set)
 import qualified Data.Map as Map
@@ -497,6 +521,9 @@ import           GHC.Generics(Generic)
 <<freetype>>
 <<basic-constraints>>
 <<type>>
+
+parseDate :: Text -> Either String _
+parseDate = undefined -- FIXME
 ```
 
 ```{.haskell file=test/Spec.hs}
