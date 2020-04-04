@@ -33,6 +33,10 @@ acks: |
 
 ---
 
+# Introduction
+
+# Problem definition
+
 If inference fails, we can always correct it by adding additional example.
 
 Minimal definition of the type^[We describe laws as QuickCheck[@quickcheck] properties for convenience.]:
@@ -69,6 +73,24 @@ Here `bottom` stands for no value permitted (empty term,
   For example an empty array `[]` could be typed
   as a array type with `bottom` elements.
 
+Law asserts that the following diagram commutes:
+
+``` { .dot width=45% height=20% #fig:type-commutes }
+digraph type {
+  node [shape=box,color=white];
+  subgraph g {
+    Bool; Type;
+    rank=same;
+  }
+  Value -> Type [xlabel="infer"];
+  Type  -> Bool [label="check with value"];
+  Value -> Bool [label="const True"];
+}
+```
+
+It is convenient validation when testing a recursive structure of the type.
+## Value domain
+
 Note that `Monoid` operation is a type unification.
 
 Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
@@ -81,6 +103,8 @@ data Value =
   | Bool   Bool
   | Null
 ```
+
+## Free union type
 
 Now for a term with constructors we can infer "free" type for every term:
 For any `T` value type Set T` satisfies our notion of _free type_.
@@ -103,22 +127,6 @@ instance (Ord a, Eq a) => FreeType a `Types` a where
   check (FreeType s) term  = term `Set.member` s
 ```
 
-Law asserts that the following diagram commutes:
-
-``` { .dot width=45% height=20% #fig:type-commutes }
-digraph type {
-  node [shape=box,color=white];
-  subgraph g {
-    Bool; Type;
-    rank=same;
-  }
-  Value -> Type [xlabel="infer"];
-  Type  -> Bool [label="check with value"];
-  Value -> Bool [label="const True"];
-}
-```
-
-It is convenient validation when testing a recursive structure of the type.
 
 This definition is sound, and for a finite realm of values, may make a sense.
 For example for a set of inputs^[Conforming to Haskell and JSON syntax, we use list for marking the elements of the set.]:
@@ -128,7 +136,7 @@ a good approximation of C-style enumeration, or Haskell-style ADT without constr
 What is wrong with this notion of _free type_?
 It does not generalize at all to infinite and recursive domains! It only allows the objects from the sample, and nothing more.
 
-## Union type system engineering
+## Type system engineering principles
 
 Given that we want to infer the type from finite number of samples
 we are presented with _learning problem_,
@@ -168,7 +176,7 @@ data UnionType =
   --deriving (Eq,Show,Generic)
 ```
 
-## JSON examples
+## Motivating examples
 
 Now let's give some motivating examples from realm of JSON API types:
 
@@ -281,7 +289,7 @@ instance Semilattice StringConstraint where
   top    = SCAny
 ```
 
-Analogically we may infer for integer constraints^[Program makes it optional `--infer-int-ranges`.] as:
+2. Analogically we may infer for integer constraints^[Program makes it optional `--infer-int-ranges`.] as:
 ```{.haskell #basic-constraints}
 data IntConstraint = IntRange Int Int
                    | IntNever
@@ -358,7 +366,7 @@ That is, we can count how many examples we have for each, and how many out of th
 are matching. And then compare it to type complexity (with optionalities being more complex than lack of them.)
 In this case latter definition has only one choice (optionality), but we only have two samples to begin with.
 
-Assuming we have more samples, the pattern emerges:
+With more samples, the pattern emerges:
 ```{.json file=test/example1b.json}
 {"error"  : "Authorization failed",
     "code":  401}
@@ -397,7 +405,7 @@ The `top` of our semilattice is the type of any `Value` term.
                   })
 ```
 
-### Dealing with conflicting alternatives
+### Conflicting alternatives
 
 Crux of union type systems have been long
 dealing with conflicting types on the input.
@@ -489,7 +497,7 @@ our validity criterion from initial part
 of the paper, however they proved to work
 well in practice.
 
-### No observations of array type
+### Array type with no element observations
 
 If we have no observations of array type,
 it can be inconvenient to disallow array to
