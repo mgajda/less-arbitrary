@@ -12,10 +12,22 @@ tags:
   - union type
   - type providers
 abstract: |
+  We present a principled theoretical
+  framework for dealing with union types,
+  system, and show its work in practice
+  on JSON data structures.
+
+  The framework poses union type
+  inference as a problem of learning
+  from multiple examples,
+  but mathematical structure of
+  the solution represents surprising
+  beauty that can be applied
+  to other type systems.
 date:   2020-04-04
 description: |
   Musings on union types
-link: "https://gitlab.com/migamake/xml-typelift"
+link: "https://gitlab.com/migamake/json-autotype"
 bibliography:
   - towards-better-union.bib
 csl: acm-template/acm-sig-proceedings.csl
@@ -34,6 +46,30 @@ acks: |
 ---
 
 # Introduction
+
+Typing dynamic languages has been long
+considered a challenge [@javascript-inference],
+but the importance
+of the task grows with ubiquity
+of JSON cloud APIs with only example
+documents in documentation.
+
+Past work have suggested it is possible
+to infer decent type mappings
+from sample data [@json-autotype-prezi]
+[@quicktype] [@type-providers-f-sharp].
+
+We expand on these results,
+by presenting the framework
+for type systems as learning algorithms,
+formulate it mathematically,
+and show its performance on
+JSON API examples.
+
+For a good comparison,
+we show results of
+previously described tools,
+and this more principled approach.
 
 # Problem definition
 
@@ -88,6 +124,7 @@ with `top` as greatest element,
 and monoid with a neutral element of `bottom`,
 we have a law specific to types.
 
+
 ``` {.haskell }
 class_law_types :: Types ty term => term -> Bool
 class_law_types term =
@@ -122,7 +159,43 @@ digraph type {
 }
 ```
 
+And laws
 It is convenient validation when testing a recursive structure of the type.
+
+### Typoid
+
+Alternative way to state properties of considered objects would be
+to define a single class `Typoid`:
+```{.haskell}
+class Typoid ty where
+  bottom, top :: ty
+  unify :: ty -> ty -> ty
+```
+
+Here:
+* unification is an associative, commutative operation
+* bottom is neutral element of unification
+* `top` is absorbing element
+
+In case of union types, where we learn shape of the type
+from examples, we can say that:
+
+* `bottom` represents _no information received_
+* `top` represents _no more information will change anything_
+or _no more information accepted_
+* `unify` represents fusing information
+  on the same entity
+  from different observations
+
+So `Typoid` is bounded meet-semilattice,
+with neutral element of the meet operation.
+
+This is important, since we may
+want to separate concerns about
+valid domain of types/type constraints
+versus concerns of the typing of the terms
+by these valid types.
+
 ## Value domain
 
 Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
@@ -153,15 +226,17 @@ instance (Ord a, Eq a) => Semilattice (FreeType a) where
   bottom = mempty
   top    = Full
 
-instance (Ord a, Eq a) => FreeType a `Types` a where
+instance (Ord      a
+         ,Eq       a)
+      =>  FreeType a `Types` a where
   infer                    = FreeType . Set.singleton
   check Full         _term = True
-  check (FreeType s) term  = term `Set.member` s
+  check (FreeType s)  term = term `Set.member` s
 ```
 
 
 This definition is sound, and for a finite realm of values, may make a sense.
-For example for a set of inputs^[Conforming to Haskell and JSON syntax, we use list for marking the elements of the set.]:
+For a set of inputs^[Conforming to Haskell and JSON syntax, we use list for marking the elements of the set.]:
 `["yes", "no", "error"]`, we might reasonably say that type is indeed
 a good approximation of C-style enumeration, or Haskell-style ADT without constructor arguments.
 
@@ -213,8 +288,10 @@ Now let's give some motivating examples from realm of JSON API types:
   * _Answer to the query is either a number of of registered objects, or String `"unavailable"`_ - this is `Int` value or a `String`
 4. Variant records:
   * _Answer contains either text message with user id, or an error._ -- That is either:
-    - `{"message" : "Where can I submit my proposal?", "uid"  : 1014}`
-    - `{"error"   : "Authorization failed",            "code" :  401}`
+```{.json}
+{"message" : "Where can I submit my proposal?", "uid"  : 1014}
+{"error"   : "Authorization failed",            "code" :  401}
+```
 
 5. Arrays in place of records^[Which strikes author as a bad practice, but we want to handle it nevertheless. Possible with `--bad-array-records` option.]:
 ``` {.json file=example5.json}
@@ -272,7 +349,37 @@ and likelihood of their occurence.
 
 ### Which of these types we may infer?
 
-#### Basic types
+#### Presence and absence constraints
+
+After seeing `true` value we also expect
+`false`, so we can say that the basic constraint
+for a boolean value is its presence or absence.
+
+```{.haskell #presence-absence-constraints}
+type BoolConstraint = Bool
+
+instance Semigroup Bool where
+  (<>) = (||)
+
+instance Monoid Bool where
+  mempty = False
+
+instance Semilattice Bool where
+  bottom = False
+  top    = True
+```
+
+That means that constraint for boolean
+is the simplest possible
+
+The same for `null`, since there is only one
+`null` value.
+
+```{.haskell #presence-absence-constraints}
+type NullConstraint = Bool
+```
+
+#### Simple type constraints
 
 1. Given a sample of values, we can have a reasonable approximation of expected values:
   - use `String` versus `Int` outright, instead of any JSON `Value`.
@@ -341,6 +448,34 @@ data NumberConstraint =
     NCInt
   | NCNever
   | NCFloat
+  deriving(Eq,Show,Generic)
+
+instance Semilattice NumberConstraint where
+  bottom = NCNever
+  top    = NCFloat
+
+instance Semigroup NumberConstraint where
+  <<standard-rules-number-constraint>>
+  NCInt <> NCInt = NCInt
+
+instance NumberConstraint `Types` Scientific where
+  infer sci
+    | base10Exponent sci >= 0 = NCInt
+  infer sci                   = NCFloat
+
+<<standard-instances-number-constraint>>
+```
+
+```{.haskell #standard-rules-number-constraint}
+NCFloat <> _       = NCFloat
+_       <> NCFloat = NCFloat
+NCNever <> _       = NCNever
+_       <> NCNever = NCNever
+```
+
+```{.haskell .hidden #standard-instances-number-constraint}
+instance Monoid NumberConstraint where
+  mempty = bottom
 ```
 
 #### Variants
@@ -523,7 +658,9 @@ instance Monoid ObjectConstraint where
 
 instance Semilattice ObjectConstraint where
   bottom = ObjectConstraint
-  top = ObjectConstraint
+  top    = ObjectConstraint
+
+instance ObjectConstraint `Types` Object where
 ```
 
 ### Array constraint
@@ -533,20 +670,87 @@ Similarly to the object,
 information about all possible representations
 of the array:
 
+* an array of the same elements
+* row with the type depending on the column
+
+We need to gather information for both
+alternatives separately, and then
+measure relatively likelihood
+of either case just before mapping
+the union type to Haskell declaration.
+
 ```{.haskell #array-constraint}
 
-data ArrayConstraint  = ArrayConstraint
+data ArrayConstraint  = ArrayConstraint {
+    arrayCase :: UnionType
+  , rowCase   :: RowConstraint
+  }
   deriving (Show, Eq, Generic)
 
+instance Semilattice ArrayConstraint where
+  bottom = ArrayConstraint {
+             arrayCase = bottom
+           , rowCase   = bottom
+           }
+  top = ArrayConstraint {
+          arrayCase = top
+        , rowCase   = top
+        }
+
 instance Semigroup ArrayConstraint where
-  _ <> _ = ArrayConstraint -- FIXME
+  a1 <> a2 =
+    ArrayConstraint {
+      arrayCase = ((<>) `on` arrayCase) a1 a2
+    , rowCase   = ((<>) `on` rowCase  ) a1 a2
+    }
 
 instance Monoid ArrayConstraint where
-  mempty = ArrayConstraint -- FIXME
+  mempty = bottom
 
-instance Semilattice ArrayConstraint where
-  bottom = ArrayConstraint
-  top = ArrayConstraint
+<<row-constraint>>
+
+instance ArrayConstraint `Types` Array
+```
+
+### Row constraint
+
+Row constraint is valid only if
+there is a fixed number of entries in each
+row, which we represent by escaping to the `top`
+whenever there is uneven number of columns.
+
+``` {.haskell #row-constraint}
+data RowConstraint =
+     RowTop
+   | RowBottom
+   | Row       [UnionType]
+   deriving (Eq,Show,Generic)
+
+instance Semilattice RowConstraint where
+  bottom = RowBottom
+  top    = RowTop
+
+instance Monoid RowConstraint where
+  mempty = bottom
+
+instance Semigroup RowConstraint where
+  <<rowconstraint-standard-lattice-rules>>
+  Row bs    <> Row cs
+    | length bs /= length cs = RowTop
+  Row bs    <> Row cs        =
+    Row $ zipWith (<>) bs cs
+```
+
+In other words, `RowConstraint` is a _levitated
+semilattice_[@levitated-lattice]
+with neutral element over content
+type `[UnionType]`.
+
+```{.haskell #row-constraint-standard-rules .hidden}
+RowBottom <> r         = r
+r         <> RowBottom = r
+RowTop    <> _         = RowTop
+_         <> RowTop    = RowTop
 ```
 
 ### Putting it together into a union
@@ -556,19 +760,24 @@ we make it a record for easier processing:
 
 Note that given constraints for different type
 constructors, union type can be though of
-as almost generic:
+as almost generic^[Which likely makes it easily expressible with HKDT[@hkdt].]:
 
 ```{.haskell #type}
 data UnionType =
   UnionType {
     unionNull :: Bool
   , unionBool :: Bool
-  , unionNum  :: IntConstraint -- FIXME
+  , unionNum  :: NumberConstraint
   , unionStr  :: StringConstraint
-  , unionObj  :: ObjectConstraint
   , unionArr  :: ArrayConstraint
+  , unionObj  :: ObjectConstraint
   }
   deriving (Eq,Show,Generic)
+
+instance Semilattice  a
+      => Semilattice (Maybe a) where
+  bottom = Nothing
+  top    = Just top
 
 instance Semigroup UnionType where
   u1 <> u2 =
@@ -624,10 +833,10 @@ instance Semilattice Bool where
 instance UnionType `Types` Value where
   infer (Bool   _) = bottom { unionBool = True }
   infer  Null      = bottom { unionNull = True }
-  infer (Number n) = bottom { unionNum  = undefined }
+  infer (Number n) = bottom { unionNum  = infer n }
   infer (String s) = bottom { unionStr  = infer s }
-  infer (Object o) = undefined
-  infer (Array  a) = undefined
+  infer (Object o) = bottom { unionObj  = infer o }
+  infer (Array  a) = bottom { unionArr  = infer a }
 ```
 
 ## Heuristics for better types
@@ -690,6 +899,18 @@ and there is no little underlying theory.
 We derive types that are valid with respect
 to specification, and thus give the best information
 from the input.
+
+We define type inference as representation learning,
+and type system engineering
+as a meta-learning problem, where our
+our **priors about
+data structure induce typing rules**.
+
+We also make a mathematical formulation of
+**union type discipline** as manipulation
+of bounded join-semilattices with neutral element,
+that represent knowledge given about the data
+structure.
 
 We also propose a union type system engineering
 methodology, justifying it by theoretical criteria,
@@ -827,6 +1048,5 @@ spec = do
          :: Value -> Bool)
 
 ```
-
 
 # Bibliography
