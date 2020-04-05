@@ -309,19 +309,19 @@ Now let's give some motivating examples from realm of JSON API types:
     "6408f5": {
         "size": 969709,
         "height": 510599,
-        "difficulty": 3007383866429.732,
+        "difficulty": 866429.732,
         "previous": "54fced"
 	},
 	"54fced": {
 	    "size": 991394,
         "height": 510598,
-        "difficulty": 3007383866429.732,
+        "difficulty": 866429.823,
         "previous": "6c9589"
 	},
 	"6c9589": {
         "size": 990527,
         "height": 510597,
-        "difficulty": 3007383866429.732,
+        "difficulty": 866429.931,
         "previous": "51a0cb"
 	}
 }
@@ -647,18 +647,50 @@ constraint for JSON object type should
 either representing it as a `Map`, or
 a record:
 ```{.haskell #object-constraint}
-data ObjectConstraint = ObjectConstraint
-  deriving (Eq,Show,Generic)
+
+data MappingConstraint =
+  MappingConstraint {
+      keyConstraint   :: StringConstraint
+    , valueConstraint :: UnionType
+    } deriving (Eq, Show, Generic)
+
+instance Semilattice MappingConstraint
+instance Semigroup   MappingConstraint
+instance Monoid      MappingConstraint
+
+data RecordConstraint = RecordConstraint {
+  } deriving (Show,Eq,Generic)
+
+instance Semilattice RecordConstraint
+instance Semigroup   RecordConstraint
+instance Monoid      RecordConstraint
+
+data ObjectConstraint = ObjectConstraint {
+    mappingCase :: MappingConstraint
+  , recordCase  :: RecordConstraint
+  } deriving (Eq,Show,Generic)
 
 instance Semigroup ObjectConstraint where
-  _ <> _ = ObjectConstraint -- FIXME
+  a <> b =
+    ObjectConstraint {
+      mappingCase =
+        ((<>) `on` mappingCase) a b
+    , recordCase =
+        ((<>) `on` recordCase ) a b
+    }
 
 instance Monoid ObjectConstraint where
-  mempty = ObjectConstraint -- FIXME
+  mempty = bottom
 
 instance Semilattice ObjectConstraint where
-  bottom = ObjectConstraint
-  top    = ObjectConstraint
+  bottom = ObjectConstraint {
+             mappingCase = bottom
+           , recordCase  = bottom
+           }
+  top    = ObjectConstraint {
+             mappingCase = top
+           , recordCase  = top
+           }
 
 instance ObjectConstraint `Types` Object where
 ```
