@@ -47,16 +47,6 @@ class (Monoid      ty
    => ty `Types` term | ty -> term where
   infer ::         term -> ty
   check :: ty   -> term -> Bool
-
-class_law_types :: Types ty term => Proxy ty -> term -> Bool
-class_law_types p term =
-  check_ p (infer_ p term) term
-
-check_ :: ty `Types` term => Proxy ty -> ty -> term -> Bool
-check_ _ = check
-infer_ :: ty `Types` term => Proxy ty ->       term -> ty
-infer_ _ = infer
-
 ```
 
 Please note that any union type defined in such way
@@ -68,12 +58,54 @@ class Monoid ty
    => Semilattice ty where
    bottom, top :: ty
 ```
-Here `bottom` stands for no value permitted (empty term,
-  without even a `null`, or **no information** about possible value).
+Here `bottom` stands for **no information** about possible value
+ (empty term,
+  without even a `null`).
   For example an empty array `[]` could be typed
   as a array type with `bottom` element type.
+
 Naturally `top` represent **everything permitted**
-or fully dynamic value.
+or fully dynamic value, when we gathered
+information that places any possible value inside the type.
+
+This firmly places type inference as a **learning problem**,
+and allows us to find the common ground
+between dynamic and static typing disciplines.
+
+Languages with static type discipline usually
+treat `top` as an error, since value should have
+a statically assigned type, and `bottom`
+as a fully polymorphic type `forall a. a`.
+
+Languages with dynamic type discipline will
+treat `top` as untyped, dynamic value,
+and `bottom` again as an unknown polymorphic value.
+
+Note that `Monoid` operation is a union type unification.
+
+Beside standard laws for bounded meet semilattice
+with `top` as greatest element,
+and monoid with a neutral element of `bottom`,
+we have a law specific to types.
+
+``` {.haskell .hidden}
+class_law_types :: Types ty term => term -> Bool
+class_law_types term =
+  check (infer term) term
+```
+
+``` {.haskell #typeclass .hidden}
+class_law_types :: Types ty term => Proxy ty -> term -> Bool
+class_law_types p term =
+  check_ p (infer_ p term) term
+```
+
+``` {.haskell .hidden #typeclass}
+check_ :: ty `Types` term => Proxy ty -> ty -> term -> Bool
+check_ _ = check
+infer_ :: ty `Types` term => Proxy ty ->       term -> ty
+infer_ _ = infer
+```
 
 Law asserts that the following diagram commutes:
 
@@ -92,8 +124,6 @@ digraph type {
 
 It is convenient validation when testing a recursive structure of the type.
 ## Value domain
-
-Note that `Monoid` operation is a type unification.
 
 Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
 ``` {.haskell file=Aeson.hs}
@@ -154,6 +184,10 @@ Since our goal is to deliver most descriptive^[Shortest, by information complexi
 types, we will assume that we need to abstract a bit from the _free type_ and take on larger
 sets whenever it seems justified.
 
+Another principle is that of **correct operation**,
+where given operations on types, we try to find a minimal types
+that assure correct operation unexpected errors.
+
 Indeed we want to use this theory to infer a type definition from a finite set of examples,
 but we also want it to generalize to infinite types.
 
@@ -164,62 +198,6 @@ Aiming for this, we set the rules of type design:
   by `T x y`,
   then `X :: x` and `Y :: y` must be also a valid typing.
 
-Since we have a union of just few possible constraints,
-we make it a record for easier processing:
-
-Note that given constraints for different type
-constructors, union type can be though of
-as almost generic:
-
-```{.haskell #type}
-
-data UnionType =
-  UnionType {
-    unionNull   :: Bool
-  , unionBool   :: Bool
-  , unionInt    :: IntConstraint
-  , unionString :: StringConstraint
-  , unionObj    :: ObjectConstraint
-  , unionArr    :: ArrayConstraint
-  }
-  deriving (Eq,Show,Generic)
-
-instance Semigroup UnionType where
-  u1 <> u2 =
-    UnionType {
-      unionNull   = ((||) `on` unionNull  ) u1 u2
-    , unionBool   = ((||) `on` unionBool  ) u1 u2
-    , unionInt    = ((<>) `on` unionInt   ) u1 u2
-    , unionString = ((<>) `on` unionString) u1 u2
-    , unionObj    = ((<>) `on` unionObj   ) u1 u2
-    , unionArr    = ((<>) `on` unionArr   ) u1 u2
-    }
-
-instance Monoid UnionType where
-  mempty = bottom
-
-instance Semilattice UnionType where
-  bottom = UnionType {
-      unionNull   = False
-    , unionBool   = False
-    , unionInt    = bottom
-    , unionString = bottom
-    , unionObj    = bottom
-    , unionArr    = bottom
-    }
-  top = UnionType {
-      unionNull   = True
-    , unionBool   = True
-    , unionInt    = top
-    , unionString = top
-    , unionObj    = top
-    , unionArr    = top
-    }
-
-instance UnionType `Types` Value where
-  infer = undefined -- FIXME
-  check = undefined -- FIXME
-```
 
 ## Motivating examples
 
@@ -564,6 +542,66 @@ and given enough samples, attempt to detect patterns ^[If we detect pattern to e
 In order to preserve efficiency, we might want to merge whenever, number of alternatives in the multiset crosses the threshold.
 ^[Option `--max-alternative-constructors=N`]
 And only attempt to narrow strings when cardinality crosses the threshold ^[Option `--min-enumeration-cardinality`.]
+
+
+### Putting it together into a union
+
+Since we have a union of just few possible constraints,
+we make it a record for easier processing:
+
+Note that given constraints for different type
+constructors, union type can be though of
+as almost generic:
+
+```{.haskell #type}
+
+data UnionType =
+  UnionType {
+    unionNull   :: Bool
+  , unionBool   :: Bool
+  , unionInt    :: IntConstraint
+  , unionString :: StringConstraint
+  , unionObj    :: ObjectConstraint
+  , unionArr    :: ArrayConstraint
+  }
+  deriving (Eq,Show,Generic)
+
+instance Semigroup UnionType where
+  u1 <> u2 =
+    UnionType {
+      unionNull   = ((||) `on` unionNull  ) u1 u2
+    , unionBool   = ((||) `on` unionBool  ) u1 u2
+    , unionInt    = ((<>) `on` unionInt   ) u1 u2
+    , unionString = ((<>) `on` unionString) u1 u2
+    , unionObj    = ((<>) `on` unionObj   ) u1 u2
+    , unionArr    = ((<>) `on` unionArr   ) u1 u2
+    }
+
+instance Monoid UnionType where
+  mempty = bottom
+
+instance Semilattice UnionType where
+  bottom = UnionType {
+      unionNull   = False
+    , unionBool   = False
+    , unionInt    = bottom
+    , unionString = bottom
+    , unionObj    = bottom
+    , unionArr    = bottom
+    }
+  top = UnionType {
+      unionNull   = True
+    , unionBool   = True
+    , unionInt    = top
+    , unionString = top
+    , unionObj    = top
+    , unionArr    = top
+    }
+
+instance UnionType `Types` Value where
+  infer = undefined -- FIXME
+  check = undefined -- FIXME
+```
 
 ## Heuristics for better types
 
