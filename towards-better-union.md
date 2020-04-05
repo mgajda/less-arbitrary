@@ -128,11 +128,11 @@ It is convenient validation when testing a recursive structure of the type.
 Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
 ``` {.haskell file=Aeson.hs}
 data Value =
-    Object Object
-  | Array  Array
-  | String Text
-  | Number Scientific
-  | Bool   Bool
+    Object (Map String Value)
+  | Array  [Value]
+  | String  Text
+  | Number  Scientific
+  | Bool    Bool
   | Null
 ```
 
@@ -483,35 +483,6 @@ for different parts of the term:
 }
 ```
 
-```{.haskell #array-constraint}
-
-data ArrayConstraint  = ArrayConstraint
-  deriving (Show, Eq, Generic)
-
-instance Semigroup ArrayConstraint where
-  _ <> _ = ArrayConstraint -- FIXME
-
-instance Monoid ArrayConstraint where
-  mempty = ArrayConstraint -- FIXME
-
-instance Semilattice ArrayConstraint where
-  bottom = ArrayConstraint
-  top = ArrayConstraint
-
-data ObjectConstraint = ObjectConstraint
-  deriving (Eq,Show,Generic)
-
-instance Semigroup ObjectConstraint where
-  _ <> _ = ObjectConstraint -- FIXME
-
-instance Monoid ObjectConstraint where
-  mempty = ObjectConstraint -- FIXME
-
-instance Semilattice ObjectConstraint where
-  bottom = ObjectConstraint
-  top = ObjectConstraint
-```
-
 ``` { .dot width=33% height=14% #fig:dataflow }
 digraph {
   margin=0;
@@ -543,6 +514,50 @@ In order to preserve efficiency, we might want to merge whenever, number of alte
 ^[Option `--max-alternative-constructors=N`]
 And only attempt to narrow strings when cardinality crosses the threshold ^[Option `--min-enumeration-cardinality`.]
 
+### Object constraint
+
+In order to avoid information loss,
+constraint for JSON object type should
+**simultaneously gather information** about
+either representing it as a `Map`, or
+a record:
+```{.haskell #object-constraint}
+data ObjectConstraint = ObjectConstraint
+  deriving (Eq,Show,Generic)
+
+instance Semigroup ObjectConstraint where
+  _ <> _ = ObjectConstraint -- FIXME
+
+instance Monoid ObjectConstraint where
+  mempty = ObjectConstraint -- FIXME
+
+instance Semilattice ObjectConstraint where
+  bottom = ObjectConstraint
+  top = ObjectConstraint
+```
+
+### Array constraint
+
+Similarly to the object,
+`ArrayConstraint` should simultaneously gather
+information about all possible representations
+of the array:
+
+```{.haskell #array-constraint}
+
+data ArrayConstraint  = ArrayConstraint
+  deriving (Show, Eq, Generic)
+
+instance Semigroup ArrayConstraint where
+  _ <> _ = ArrayConstraint -- FIXME
+
+instance Monoid ArrayConstraint where
+  mempty = ArrayConstraint -- FIXME
+
+instance Semilattice ArrayConstraint where
+  bottom = ArrayConstraint
+  top = ArrayConstraint
+```
 
 ### Putting it together into a union
 
@@ -554,7 +569,6 @@ constructors, union type can be though of
 as almost generic:
 
 ```{.haskell #type}
-
 data UnionType =
   UnionType {
     unionNull   :: Bool
@@ -569,8 +583,8 @@ data UnionType =
 instance Semigroup UnionType where
   u1 <> u2 =
     UnionType {
-      unionNull   = ((||) `on` unionNull  ) u1 u2
-    , unionBool   = ((||) `on` unionBool  ) u1 u2
+      unionNull   = ((<>) `on` unionNull  ) u1 u2
+    , unionBool   = ((<>) `on` unionBool  ) u1 u2
     , unionInt    = ((<>) `on` unionInt   ) u1 u2
     , unionString = ((<>) `on` unionString) u1 u2
     , unionObj    = ((<>) `on` unionObj   ) u1 u2
@@ -582,16 +596,16 @@ instance Monoid UnionType where
 
 instance Semilattice UnionType where
   bottom = UnionType {
-      unionNull   = False
-    , unionBool   = False
+      unionNull   = bottom
+    , unionBool   = bottom
     , unionInt    = bottom
     , unionString = bottom
     , unionObj    = bottom
     , unionArr    = bottom
     }
   top = UnionType {
-      unionNull   = True
-    , unionBool   = True
+      unionNull   = top
+    , unionBool   = top
     , unionInt    = top
     , unionString = top
     , unionObj    = top
@@ -602,6 +616,23 @@ instance UnionType `Types` Value where
   infer = undefined -- FIXME
   check = undefined -- FIXME
 ```
+
+Note that booleans and `null` values are
+both denoted by trivial `Bool` constraint,
+where truth denotes `top`, and false denotes
+`bottom`. In other words, we only
+care about presence or absence of their observation.
+``` {.haskell #type}
+instance Semigroup Bool where
+  (<>) = (||)
+instance Monoid Bool where
+  mempty = False
+
+instance Semilattice Bool where
+  top = True
+  bottom = False
+```
+
 
 ## Heuristics for better types
 
@@ -685,6 +716,7 @@ in the future.
 {-# language MultiParamTypeClasses  #-}
 {-# language PartialTypeSignatures  #-}
 {-# language ScopedTypeVariables    #-}
+{-# language StandaloneDeriving     #-}
 {-# language TypeApplications       #-}
 {-# language TypeOperators          #-}
 {-# language TypeSynonymInstances   #-}
@@ -709,20 +741,55 @@ import           GHC.Generics(Generic)
 <<object-constraint>>
 <<type>>
 
+<<missing>>
+```
+
+In order to represent `FreeType` for the `Value`,
+we need to add `Ord` instance for it:
+``` {.haskell .hidden #missing}
+deriving instance Ord       Value
+```
+
+```{.haskell #missing}
+
 parseDate :: Text -> Either String _
 parseDate = undefined -- FIXME
+
 ```
 
 ```{.haskell file=test/Spec.hs .hidden}
+{-# language StandaloneDeriving     #-}
+module Main where
+
+import qualified Data.HashMap.Strict as Map
+import qualified Data.Vector         as Vector
+import qualified Data.Text           as Text
+import Data.Scientific
 import Data.Aeson
 import Data.Proxy
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
+import Test.QuickCheck.Gen
 import Unions
 
-instance Ord Value
-instance Arbitrary Value
+instance Arbitrary Value where
+  arbitrary = oneof [
+      pure Null
+    , Bool   <$> arbitrary
+    , String <$> arbitrary
+    , Number <$> arbitrary
+    , Array  <$> Vector.fromList <$> listOf arbitrary
+    , Object <$> Map.fromList
+             <$> listOf ((,) <$> arbitrary
+                             <*> arbitrary)
+    ]
+
+instance Arbitrary Text.Text where
+  arbitrary = Text.pack <$> arbitrary
+
+instance Arbitrary Scientific where
+  arbitrary = scientific <$> arbitrary <*> arbitrary
 
 main = hspec spec
 
