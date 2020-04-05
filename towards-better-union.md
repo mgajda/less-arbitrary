@@ -52,7 +52,6 @@ class_law_types :: Types ty term => Proxy ty -> term -> Bool
 class_law_types p term =
   check_ p (infer_ p term) term
 
-
 check_ :: ty `Types` term => Proxy ty -> ty -> term -> Bool
 check_ _ = check
 infer_ :: ty `Types` term => Proxy ty ->       term -> ty
@@ -180,11 +179,10 @@ data UnionType =
   , unionBool   :: Bool
   , unionInt    :: IntConstraint
   , unionString :: StringConstraint
-  -- FIXME:
   , unionObj    :: ObjectConstraint
   , unionArr    :: ArrayConstraint
   }
-  --deriving (Eq,Show,Generic)
+  deriving (Eq,Show,Generic)
 
 instance Semigroup UnionType where
   u1 <> u2 =
@@ -307,6 +305,7 @@ data StringConstraint =
   | SCEnum (Set Text)
   | SCNever
   | SCAny
+  deriving(Eq, Show,Generic)
 
 instance StringConstraint `Types` Text where
   infer (parseDate -> Right _) = SCDate
@@ -509,6 +508,7 @@ for different parts of the term:
 ```{.haskell #array-constraint}
 
 data ArrayConstraint  = ArrayConstraint
+  deriving (Show, Eq, Generic)
 
 instance Semigroup ArrayConstraint where
   _ <> _ = ArrayConstraint -- FIXME
@@ -521,6 +521,7 @@ instance Semilattice ArrayConstraint where
   top = ArrayConstraint
 
 data ObjectConstraint = ObjectConstraint
+  deriving (Eq,Show,Generic)
 
 instance Semigroup ObjectConstraint where
   _ <> _ = ObjectConstraint -- FIXME
@@ -639,16 +640,17 @@ in the future.
 
 ```{.haskell file=src/Unions.hs .hidden}
 {-# language AllowAmbiguousTypes    #-}
+{-# language DeriveGeneric          #-}
+{-# language DuplicateRecordFields  #-}
+{-# language FlexibleInstances      #-}
+{-# language FunctionalDependencies #-}
+{-# language MultiParamTypeClasses  #-}
+{-# language PartialTypeSignatures  #-}
 {-# language ScopedTypeVariables    #-}
 {-# language TypeApplications       #-}
 {-# language TypeOperators          #-}
 {-# language TypeSynonymInstances   #-}
-{-# language FlexibleInstances      #-}
 {-# language ViewPatterns           #-}
-{-# language DuplicateRecordFields  #-}
-{-# language MultiParamTypeClasses  #-}
-{-# language FunctionalDependencies #-}
-{-# language PartialTypeSignatures  #-}
 module Unions where
 
 import           Data.Aeson
