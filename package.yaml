@@ -28,3 +28,8 @@ tests:
       - vector
       - unordered-containers
       - scientific
+      - validity
+      - genvalidity
+      - genvalidity-hspec
+      - genvalidity-property
+

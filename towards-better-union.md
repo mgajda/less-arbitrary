@@ -88,7 +88,7 @@ with `top` as greatest element,
 and monoid with a neutral element of `bottom`,
 we have a law specific to types.
 
-``` {.haskell .hidden}
+``` {.haskell }
 class_law_types :: Types ty term => term -> Bool
 class_law_types term =
   check (infer term) term
@@ -411,17 +411,7 @@ as prior selection, let's state some obvious rules
 for the typing:
 
 1. We generalize basic datatypes:
-```{.haskell #json-types-instance}
 
-instance SemiLattice UnionType where
-  bottom = undefined
-
-instance UnionType `Types` Value where
-    infer (Bool _) = bottom { unionBool = True }
-    infer (Int  i) = bottom { unionInt  = infer i }
-    infer  Null    = bottom { null = True }
-    -- ...
-```
 Note that we treat `null` as separate basic types,
 that can form union with any other.
 Thus `bottom` indicates _no type and no value_.
@@ -571,24 +561,24 @@ as almost generic:
 ```{.haskell #type}
 data UnionType =
   UnionType {
-    unionNull   :: Bool
-  , unionBool   :: Bool
-  , unionInt    :: IntConstraint
-  , unionString :: StringConstraint
-  , unionObj    :: ObjectConstraint
-  , unionArr    :: ArrayConstraint
+    unionNull :: Bool
+  , unionBool :: Bool
+  , unionNum  :: IntConstraint -- FIXME
+  , unionStr  :: StringConstraint
+  , unionObj  :: ObjectConstraint
+  , unionArr  :: ArrayConstraint
   }
   deriving (Eq,Show,Generic)
 
 instance Semigroup UnionType where
   u1 <> u2 =
     UnionType {
-      unionNull   = ((<>) `on` unionNull  ) u1 u2
-    , unionBool   = ((<>) `on` unionBool  ) u1 u2
-    , unionInt    = ((<>) `on` unionInt   ) u1 u2
-    , unionString = ((<>) `on` unionString) u1 u2
-    , unionObj    = ((<>) `on` unionObj   ) u1 u2
-    , unionArr    = ((<>) `on` unionArr   ) u1 u2
+      unionNull = ((<>) `on` unionNull) u1 u2
+    , unionBool = ((<>) `on` unionBool) u1 u2
+    , unionNum  = ((<>) `on` unionNum ) u1 u2
+    , unionStr  = ((<>) `on` unionStr ) u1 u2
+    , unionObj  = ((<>) `on` unionObj ) u1 u2
+    , unionArr  = ((<>) `on` unionArr ) u1 u2
     }
 
 instance Monoid UnionType where
@@ -596,25 +586,21 @@ instance Monoid UnionType where
 
 instance Semilattice UnionType where
   bottom = UnionType {
-      unionNull   = bottom
-    , unionBool   = bottom
-    , unionInt    = bottom
-    , unionString = bottom
-    , unionObj    = bottom
-    , unionArr    = bottom
+      unionNull = bottom
+    , unionBool = bottom
+    , unionNum  = bottom
+    , unionStr  = bottom
+    , unionObj  = bottom
+    , unionArr  = bottom
     }
   top = UnionType {
-      unionNull   = top
-    , unionBool   = top
-    , unionInt    = top
-    , unionString = top
-    , unionObj    = top
-    , unionArr    = top
+      unionNull = top
+    , unionBool = top
+    , unionNum  = top
+    , unionStr  = top
+    , unionObj  = top
+    , unionArr  = top
     }
-
-instance UnionType `Types` Value where
-  infer = undefined -- FIXME
-  check = undefined -- FIXME
 ```
 
 Note that booleans and `null` values are
@@ -633,6 +619,16 @@ instance Semilattice Bool where
   bottom = False
 ```
 
+``` {.haskell #union-type-instance}
+
+instance UnionType `Types` Value where
+  infer (Bool   _) = bottom { unionBool = True }
+  infer  Null      = bottom { unionNull = True }
+  infer (Number n) = bottom { unionNum  = undefined }
+  infer (String s) = bottom { unionStr  = infer s }
+  infer (Object o) = undefined
+  infer (Array  a) = undefined
+```
 
 ## Heuristics for better types
 
@@ -725,13 +721,15 @@ module Unions where
 
 import           Data.Aeson
 import           Data.Either
-import           Data.Function
+import           Data.Function(on)
 import           Data.Proxy
 import           Data.Text(Text)
 import qualified Data.Text as Text
 import qualified Data.Set  as Set
 import           Data.Set(Set)
-import qualified Data.Map as Map
+import           Data.Scientific
+import           Data.List(sortBy)
+import qualified Data.HashMap.Strict as Map
 import           GHC.Generics(Generic)
 
 <<typeclass>>
@@ -739,6 +737,7 @@ import           GHC.Generics(Generic)
 <<basic-constraints>>
 <<array-constraint>>
 <<object-constraint>>
+<<union-type-instance>>
 <<type>>
 
 <<missing>>
@@ -747,7 +746,30 @@ import           GHC.Generics(Generic)
 In order to represent `FreeType` for the `Value`,
 we need to add `Ord` instance for it:
 ``` {.haskell .hidden #missing}
-deriving instance Ord       Value
+instance Ord       Value where
+  compare = compare `on` encodeConstructors
+
+fromEnum' :: Enum a => a -> Integer
+fromEnum' = fromIntegral . fromEnum
+
+encodeConstructors :: Value -> [Integer]
+encodeConstructors  Null      = [0]
+encodeConstructors (Bool   b) = [1, fromEnum' b]
+encodeConstructors (Number n) = [2,
+        fromIntegral $ base10Exponent n,
+        coefficient n]
+encodeConstructors (String s) = 3:
+  (fromEnum' <$> Text.unpack s)
+encodeConstructors (Array  a) = 4:
+  concatMap encodeConstructors a
+encodeConstructors (Object o) =
+    concatMap encodeItem      $
+    sortBy (compare `on` fst) $
+    Map.toList o
+  where
+    encodeItem (k, v) =
+      (fromEnum' <$> Text.unpack k) <>
+      encodeConstructors v
 ```
 
 ```{.haskell #missing}
@@ -773,6 +795,7 @@ import Test.QuickCheck
 import Test.QuickCheck.Gen
 import Unions
 
+-- FIXME: use json-autotype's
 instance Arbitrary Value where
   arbitrary = oneof [
       pure Null
@@ -796,10 +819,12 @@ main = hspec spec
 spec = do
   describe "Free types" $ do
     prop "law of class Types" $
-      class_law_types (Proxy :: Proxy (FreeType Value))
+      (class_law_types (Proxy :: Proxy (FreeType Value))
+         :: Value -> Bool)
   describe "JSON types" $ do
     prop "law of class Types" $
-      class_law_types (Proxy :: Proxy UnionType)
+      (class_law_types (Proxy :: Proxy UnionType)
+         :: Value -> Bool)
 
 ```
 
