@@ -166,10 +166,21 @@ It is convenient validation when testing a recursive structure of the type.
 
 Alternative way to state properties of considered objects would be
 to define a single class `Typoid`:
-```{.haskell}
+```{.haskell #typoid}
 class Typoid ty where
   bottom, top :: ty
-  unify :: ty -> ty -> ty
+  (/\) :: ty -> ty -> ty
+
+typoid_laws name = describe ("typoid " <> name) $ do
+  describe "bottom is neutral element" $
+    prop "left"  $ \t -> bottom /\ t      == t
+    prop "right" $ \t -> t      /\ bottom == t
+  describe "top is absorbing element" $
+    prop "left"  $ \t -> top    /\ t      == top
+    prop "right" $ \t -> t      /\ top    == top
+  prop "commutative" $ \t u -> t /\ u == u /\ t
+  prop "associative" $ \t u v ->  t /\ (u  /\ v)
+                              == (t /\  u) /\ v
 ```
 
 Here:
@@ -1083,6 +1094,12 @@ spec = do
       (class_law_types (Proxy :: Proxy UnionType)
          :: Value -> Bool)
 
+```
+
+```{.haskell file=src/Typoid.hs}
+module Typoid where
+import hspec
+<<typoid>>
 ```
 
 # Bibliography
