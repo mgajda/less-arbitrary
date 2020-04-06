@@ -196,6 +196,10 @@ valid domain of types/type constraints
 versus concerns of the typing of the terms
 by these valid types.
 
+Note that this approach is a bit more relaxed than
+full lattice subtyping[@subtyping-lattice],
+since it only considers semilattice with unification operation.
+
 ## Value domain
 
 Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
