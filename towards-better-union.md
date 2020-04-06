@@ -197,7 +197,7 @@ versus concerns of the typing of the terms
 by these valid types.
 
 Note that this approach is a bit more relaxed than
-full lattice subtyping[@subtyping-lattice],
+full lattice subtyping[@subtype-inequalities][@subtyping-lattice],
 since it only considers semilattice with unification operation.
 
 ## Value domain
