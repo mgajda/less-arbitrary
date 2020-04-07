@@ -19,11 +19,9 @@ abstract: |
 
   The framework poses union type
   inference as a problem of learning
-  from multiple examples,
-  but mathematical structure of
-  the solution represents surprising
-  beauty that can be applied
-  to other type systems.
+  from multiple examples.
+  Mathematical framework is quite
+  generic, and easily extensible.
 date:   2020-04-04
 description: |
   Musings on union types
@@ -162,28 +160,38 @@ digraph type {
 And laws
 It is convenient validation when testing a recursive structure of the type.
 
-### Typoid
+### Definition of typelike
 
 Alternative way to state properties of considered objects would be
-to define a single class `Typoid`:
-```{.haskell #typoid}
-class Typoid ty where
+to define a single class `Typelike`:
+```{.haskell #Typelike}
+class (Eq   ty
+      ,Show ty)
+   => Typelike ty where
   bottom, top :: ty
-  (/\) :: ty -> ty -> ty
+  (\/) :: ty -> ty -> ty
 
-typoid_laws name = describe ("typoid " <> name) $ do
+instance Typelike ty => Monoid ty where
+  mappend = (\/)
+  mempty  = bottom
+
+instance Typelike ty => Semigroup ty where
+  (<>) = (\/)
+
+Typelike_laws name = describe ("Typelike " <> name) $ do
   describe "bottom is neutral element" $
-    prop "left"  $ \t -> bottom /\ t      == t
-    prop "right" $ \t -> t      /\ bottom == t
+    prop "left"  $ \t -> bottom \/ t      == t
+    prop "right" $ \t -> t      \/ bottom == t
   describe "top is absorbing element" $
-    prop "left"  $ \t -> top    /\ t      == top
-    prop "right" $ \t -> t      /\ top    == top
-  prop "commutative" $ \t u -> t /\ u == u /\ t
-  prop "associative" $ \t u v ->  t /\ (u  /\ v)
-                              == (t /\  u) /\ v
+    prop "left"  $ \t -> top    \/ t      == top
+    prop "right" $ \t -> t      \/ top    == top
+  prop "commutative" $ \t u -> t \/ u == u \/ t
+  prop "associative" $ \t u v ->  t \/ (u  \/ v)
+                              == (t \/  u) \/ v
 ```
 
 Here:
+
 * unification is an associative, commutative operation
 * bottom is neutral element of unification
 * `top` is absorbing element
@@ -198,8 +206,13 @@ or _no more information accepted_
   on the same entity
   from different observations
 
-So `Typoid` is bounded meet-semilattice,
-with neutral element of the meet operation.
+So `Typelike` is bounded join-semilattice,
+assuring existence of neutral element
+of the join operation.
+
+We call neutral element to be _no information given_
+or _no observation_, and maximum to be
+_no more information accepted_.
 
 This is important, since we may
 want to separate concerns about
@@ -210,6 +223,21 @@ by these valid types.
 Note that this approach is a bit more relaxed than
 full lattice subtyping[@subtype-inequalities][@subtyping-lattice],
 since it only considers semilattice with unification operation.
+
+When we consider **union Typelike**, we also have
+additional laws:
+
+```{.haskell #Typelike}
+union_Typelike_laws name =
+  describe ("union Typelike " <> name) $
+    prop "bottom never satisfied" $
+      \t -> check bottom t == False`
+    prop "top always satisfied" $
+      \t -> check top    t == True
+```
+
+This is design choice that does not apply when
+using Typelike to represent static type discipline.
 
 ## Value domain
 
@@ -390,7 +418,7 @@ is the simplest possible
 The same for `null`, since there is only one
 `null` value.
 
-```{.haskell #presence-absence-constraints}
+``` {.haskell #presence-absence-constraints}
 type NullConstraint = Bool
 ```
 
@@ -477,6 +505,9 @@ instance NumberConstraint `Types` Scientific where
   infer sci
     | base10Exponent sci >= 0 = NCInt
   infer sci                   = NCFloat
+  check NCFloat sci = True
+  check NCInt   sci = base10Exponent sci >= 0
+  check NCNever sci = False
 
 <<standard-instances-number-constraint>>
 ```
@@ -583,6 +614,7 @@ with conflicting alternative assignments.
 
 It is apparent that examples 4. to 6.
 hint at more than one assignment:
+
 5. Either a list of lists of values that are one of `Int`, `String`, or `null`, or a table that has the same (and predefined) type
 for each
 
@@ -623,7 +655,7 @@ for different parts of the term:
 }
 ```
 
-``` { .dot width=33% height=14% #fig:dataflow }
+```dot { .dot width=33% height=14% #fig:dataflow }
 digraph {
   margin=0;
   node [shape=box,color=white];
@@ -640,10 +672,10 @@ digraph {
   }
   subgraph g3 {
     "Unify similar";
-    "Produce type";
+    "Produce type" [label="Produce type mapping"];
     rank=same;
   }
-  "JSON Value" -> "Free type" -> "Local generalization" -> "Match similar" -> "Unify similar" -> "Produce type";
+  "JSON Value" -> "Free type" -> "Local generalization" -> "Match similar" -> "Unify similar" -> "Produce type" -> "Haskell code";
 }
 ```
 
@@ -669,16 +701,49 @@ data MappingConstraint =
     , valueConstraint :: UnionType
     } deriving (Eq, Show, Generic)
 
-instance Semilattice MappingConstraint
-instance Semigroup   MappingConstraint
-instance Monoid      MappingConstraint
+instance Semilattice MappingConstraint where
+  bottom = MappingConstraint {
+      keyConstraint   = bottom
+    , valueConstraint = bottom
+    }
+  top = MappingConstraint {
+      keyConstraint   = top
+    , valueConstraint = top
+    }
 
-data RecordConstraint = RecordConstraint {
-  } deriving (Show,Eq,Generic)
+instance Semigroup   MappingConstraint where
+  a <> b = MappingConstraint {
+      keyConstraint   =
+        ((<>) `on` keyConstraint  ) a b
+    , valueConstraint =
+        ((<>) `on` valueConstraint) a b
+    }
 
-instance Semilattice RecordConstraint
-instance Semigroup   RecordConstraint
-instance Monoid      RecordConstraint
+instance Monoid      MappingConstraint where
+  mempty = bottom
+
+data RecordConstraint =
+    RCTop
+  | RCBottom
+  | RecordConstraint {
+        fields :: HashMap Text UnionType
+      } deriving (Show,Eq,Generic)
+
+instance Semilattice RecordConstraint where
+  bottom = RCBottom
+  top    = RCTop
+
+instance Semigroup   RecordConstraint where
+  RCBottom <> a        = a
+  a        <> RCBottom = a
+  RCTop    <> _        = RCTop
+  _        <> RCTop    = RCTop
+  a        <> b        = RecordConstraint $
+    undefined -- FIXME
+
+
+instance Monoid      RecordConstraint where
+  mempty = bottom
 
 data ObjectConstraint = ObjectConstraint {
     mappingCase :: MappingConstraint
@@ -969,6 +1034,10 @@ system engineering_ will be more ubiquitous
 in practice, replacing _ad-hoc_ approaches
 in the future.
 
+# Bibliography
+
+<div id="refs"/>
+
 # Appendix
 
 ```{.haskell file=src/Unions.hs .hidden}
@@ -998,6 +1067,7 @@ import           Data.Set(Set)
 import           Data.Scientific
 import           Data.List(sortBy)
 import qualified Data.HashMap.Strict as Map
+import           Data.HashMap.Strict(HashMap)
 import           GHC.Generics(Generic)
 
 <<typeclass>>
@@ -1096,10 +1166,10 @@ spec = do
 
 ```
 
-```{.haskell file=src/Typoid.hs}
-module Typoid where
+```{.haskell file=src/Typelike.hs}
+module Typelike where
 import hspec
-<<typoid>>
+<<Typelike>>
 ```
 
-# Bibliography
+# Appendix: generic Typelike
