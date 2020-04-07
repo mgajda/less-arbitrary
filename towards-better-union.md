@@ -872,7 +872,7 @@ we make it a record for easier processing:
 
 Note that given constraints for different type
 constructors, union type can be though of
-as almost generic^[Which likely makes it easily expressible with HKDT[@hkdt-blog][@hkdt-barbies].]:
+as almost generic[@generic-monoid]^[Which likely makes it easily expressible with HKDT[@hkdt-blog][@hkdt-barbies].]:
 
 ```{.haskell #type}
 data UnionType =
