@@ -239,6 +239,36 @@ union_Typelike_laws name =
 This is design choice that does not apply when
 using Typelike to represent static type discipline.
 
+Minimal `Typelike` instance would be one
+that contains only `bottom` for _no sample data received_,
+and `top` for _all values permitted_.
+
+We call this useful case a _presence or absence constraint_:
+```{.haskell #Typelike}
+
+data PresenceConstraint =
+    Present
+  | Absent
+  deriving (Eq, Show)
+
+instance Typelike PresenceConstraint where
+  bottom = Absent
+  top    = Present
+  Absent  /\ a       = a
+  a       /\ Absent  = a
+  Present /\ Present = Present
+
+instance Types PresenceConstraint a where
+  infer _         = Present
+  check Present _ = True
+  check Absent  _ = False
+```
+
+While it does not look immediately useful
+in context where we always have at least one value
+on input, it is important where we can receive empty
+array (and thus no values for the element type.)
+
 ## Value domain
 
 Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
@@ -381,7 +411,7 @@ to make sure we exhaustively treat the input.
 Thus we can assume that the smallest non-singleton set is a better approximation type than a singleton.
 We call it _minimal containing set principle_.
 
-Second we can prefer types that allow for _less degrees freedom_ than the others,
+Second we can prefer types that allow for _less degrees of freedom_ than the others,
 while conforming to some commonly occuring structure. We call it _information content principle_.
 
 Given these principles, and examples of frequently occuring patterns,
@@ -721,7 +751,12 @@ instance Semigroup   MappingConstraint where
 
 instance Monoid      MappingConstraint where
   mempty = bottom
+```
 
+Separately we gather information about
+the possible typing of the JSON object
+as a record of values:
+```{.haskell #object-constraint}
 data RecordConstraint =
     RCTop
   | RCBottom
@@ -744,7 +779,16 @@ instance Semigroup   RecordConstraint where
 
 instance Monoid      RecordConstraint where
   mempty = bottom
+```
 
+Seeing that the two abstract domains above
+are independent, we store information
+about both option separately in a record
+^[Choice of representation will be explained later.
+Here we only consider gathering of information
+about the possible values.]
+
+```{.haskell #object-constraint}
 data ObjectConstraint = ObjectConstraint {
     mappingCase :: MappingConstraint
   , recordCase  :: RecordConstraint
@@ -775,6 +819,12 @@ instance Semilattice ObjectConstraint where
 instance ObjectConstraint `Types` Object where
 ```
 
+Note that this representation is similar
+in sense to _intersection type_:
+any value that satisfies `ObjectConstraint`
+must satisfy by contained `mappingCase`,
+and `recordCase`.
+
 ### Array constraint
 
 Similarly to the object,
@@ -791,6 +841,8 @@ measure relatively likelihood
 of either case just before mapping
 the union type to Haskell declaration.
 
+Again, we put the record of
+two different possible representations:
 ```{.haskell #array-constraint}
 
 data ArrayConstraint  = ArrayConstraint {
@@ -872,7 +924,7 @@ we make it a record for easier processing:
 
 Note that given constraints for different type
 constructors, union type can be though of
-as almost generic[@generic-monoid]^[Which likely makes it easily expressible with HKDT[@hkdt-blog][@hkdt-barbies].]:
+as mostly generic[@generic-monoid]^[Which likely makes it easily expressible with HKDT[@hkdt-blog][@hkdt-barbies].]:
 
 ```{.haskell #type}
 data UnionType =
@@ -901,7 +953,13 @@ instance Semigroup UnionType where
     , unionObj  = ((<>) `on` unionObj ) u1 u2
     , unionArr  = ((<>) `on` unionArr ) u1 u2
     }
+```
+Generic structure of union type can be explained
+by the fact that informations contained in different
+record fields are _independent from each other_.
+That means that we compute the meet over different dimensions.
 
+```{.haskell #type}
 instance Monoid UnionType where
   mempty = bottom
 
@@ -940,6 +998,13 @@ instance Semilattice Bool where
   bottom = False
 ```
 
+Inference uses _mutual exclusivity_ of the
+cases, depending on the kind of value.
+This allows as for clear and efficient
+treatment of values distinguished by different
+dynamic type into different partitions
+of the union:
+
 ``` {.haskell #union-type-instance}
 
 instance UnionType `Types` Value where
@@ -949,6 +1014,11 @@ instance UnionType `Types` Value where
   infer (String s) = bottom { unionStr  = infer s }
   infer (Object o) = bottom { unionObj  = infer o }
   infer (Array  a) = bottom { unionArr  = infer a }
+  check UnionType { unionNum } (Number n) = check unionNum n
+  check UnionType { unionStr } (String s) = check unionStr s
+  check UnionType { unionObj } (Object o) = check unionObj o
+  check UnionType { unionArr } (Array  a) = check unionArr a
+  -- FIXME: Presence absence case
 ```
 
 ## Heuristics for better types
