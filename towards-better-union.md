@@ -123,7 +123,7 @@ and monoid with a neutral element of `bottom`,
 we have a law specific to types.
 
 
-``` {.haskell }
+``` {.haskell #typelike}
 class_law_types :: Types ty term => term -> Bool
 class_law_types term =
   check (infer term) term
@@ -175,19 +175,26 @@ instance Typelike ty => Monoid ty where
   mappend = (\/)
   mempty  = bottom
 
-instance Typelike ty => Semigroup ty where
+instance {-# overlaps #-} Typelike ty => Semigroup ty where
+  -- not really
   (<>) = (\/)
 
-Typelike_laws name = describe ("Typelike " <> name) $ do
-  describe "bottom is neutral element" $
-    prop "left"  $ \t -> bottom \/ t      == t
-    prop "right" $ \t -> t      \/ bottom == t
-  describe "top is absorbing element" $
-    prop "left"  $ \t -> top    \/ t      == top
-    prop "right" $ \t -> t      \/ top    == top
-  prop "commutative" $ \t u -> t \/ u == u \/ t
-  prop "associative" $ \t u v ->  t \/ (u  \/ v)
-                              == (t \/  u) \/ v
+typelike_laws :: forall    ty.
+                (Typelike  ty
+                ,Arbitrary ty)
+              => Proxy     ty
+              -> String -> Spec
+typelike_laws (Proxy :: Proxy ty) name =
+  describe ("Typelike " <> name) $ do
+    describe "bottom is neutral element" $ do
+      prop "left"  $ \t -> bottom \/ t      == (t   :: ty)
+      prop "right" $ \t -> t      \/ bottom == (t   :: ty)
+    describe "top is absorbing element" $ do
+      prop "left"  $ \t -> top    \/ t      == (top :: ty)
+      prop "right" $ \t -> t      \/ top    == (top :: ty)
+    prop "commutative" $ \t u -> t \/ u == u \/ (t  :: ty)
+    prop "associative" $ \t u v ->  t \/ (u  \/  v)
+                                == (t \/  u) \/ (v  :: ty)
 ```
 
 Here:
@@ -228,12 +235,17 @@ When we consider **union Typelike**, we also have
 additional laws:
 
 ```{.haskell #Typelike}
-union_Typelike_laws name =
-  describe ("union Typelike " <> name) $
+union_types_laws :: forall ty         v.
+                          (ty `Types` v
+                          ,Arbitrary  v
+                          ,Show       v)
+                 => Proxy (ty, v) -> String -> Spec
+union_types_laws (Proxy :: Proxy (ty, v)) name =
+  describe ("union type " <> name) $ do
     prop "bottom never satisfied" $
-      \t -> check bottom t == False`
+      ((not . check (bottom :: ty)) :: v -> Bool)
     prop "top always satisfied" $
-      \t -> check top    t == True
+      ((check (top :: ty)) :: v -> Bool)
 ```
 
 This is design choice that does not apply when
@@ -254,14 +266,19 @@ data PresenceConstraint =
 instance Typelike PresenceConstraint where
   bottom = Absent
   top    = Present
-  Absent  /\ a       = a
-  a       /\ Absent  = a
-  Present /\ Present = Present
+  Absent  \/ a       = a
+  a       \/ Absent  = a
+  Present \/ Present = Present
 
-instance Types PresenceConstraint a where
-  infer _         = Present
+instance PresenceConstraint `Types` a where
+  infer _ _       = Present
   check Present _ = True
   check Absent  _ = False
+
+class Typelike ty
+   => ty `Types` val where
+   infer :: Proxy ty -> val -> ty
+   check ::       ty -> val -> Bool
 ```
 
 While it does not look immediately useful
@@ -1045,6 +1062,20 @@ That is because, our program must not have any assumptions
 about these values, but at the same it should be able to
 output them for debugging purposes.
 
+### Scaling to type environments
+
+For now we have only discussed typing
+of treelike values. However, it is natural
+to scale this approach to multiple types in
+API, where different types are referred to by
+name, and possibly contain each other.
+
+To address this situation, we show
+that environment of typelikes is also `Typelike`,
+and constraint unification can be  extended the same
+way.
+
+
 ### Simplification by finding unification candidates
 
 In most JSON documents we found that
@@ -1117,6 +1148,7 @@ in the future.
 {-# language FlexibleInstances      #-}
 {-# language FunctionalDependencies #-}
 {-# language MultiParamTypeClasses  #-}
+{-# language NamedFieldPuns         #-}
 {-# language PartialTypeSignatures  #-}
 {-# language ScopedTypeVariables    #-}
 {-# language StandaloneDeriving     #-}
@@ -1237,8 +1269,19 @@ spec = do
 ```
 
 ```{.haskell file=src/Typelike.hs}
+{-# language FlexibleInstances     #-}
+{-# language Rank2Types            #-}
+{-# language MultiParamTypeClasses #-}
+{-# language ScopedTypeVariables   #-}
+{-# language TypeOperators         #-}
+{-# language UndecidableInstances  #-}
 module Typelike where
-import hspec
+
+import Data.Proxy
+import Test.Hspec
+import Test.Hspec.QuickCheck
+import Test.QuickCheck
+
 <<Typelike>>
 ```
 

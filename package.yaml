@@ -12,6 +12,7 @@ dependencies:
 - aeson
 - containers
 - text
+- hspec
 library:
   source-dirs: src
   exposed-modules:
