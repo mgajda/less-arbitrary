@@ -40,6 +40,7 @@ out/%.svg: plots/%.gnuplot plots/%.csv
 debug.out:
 	pandoc ${OPTIONS} \
 		-t json -o debug.json ${SRC}
+	json_pp < debug.json > debug_pp.json
 
 ${TEX}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${BIBLIO}
 	pandoc ${OPTIONS} \

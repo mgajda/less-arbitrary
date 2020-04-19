@@ -32,6 +32,8 @@ csl: acm-template/acm-sig-proceedings.csl
 prologue: |
   \let\longtable\tabular
   \let\endlongtable\endtabular
+  \renewcommand{\url}[1]{\href{#1}{[Link]}}
+link-citations: true
 tables: true
 listings: true
 acks: |
@@ -1031,11 +1033,17 @@ instance UnionType `Types` Value where
   infer (String s) = bottom { unionStr  = infer s }
   infer (Object o) = bottom { unionObj  = infer o }
   infer (Array  a) = bottom { unionArr  = infer a }
-  check UnionType { unionNum } (Number n) = check unionNum n
-  check UnionType { unionStr } (String s) = check unionStr s
-  check UnionType { unionObj } (Object o) = check unionObj o
-  check UnionType { unionArr } (Array  a) = check unionArr a
-  -- FIXME: Presence absence case
+  check UnionType { unionNum } (Number n) =
+              check unionNum           n
+  check UnionType { unionStr } (String s) =
+              check unionStr           s
+  check UnionType { unionObj } (Object o) =
+              check unionObj           o
+  check UnionType { unionArr } (Array  a) =
+              check unionArr           a
+```
+```{.haskell .hidden #union-type-instance}
+-- FIXME: Use presence/absence for clarity not bool
 ```
 
 ## Heuristics for better types
@@ -1135,9 +1143,10 @@ system engineering_ will be more ubiquitous
 in practice, replacing _ad-hoc_ approaches
 in the future.
 
-# Bibliography
+# Bibliography  {.references}
 
-<div id="refs"/>
+::::: {.refs}
+:::::
 
 # Appendix
 
@@ -1268,6 +1277,8 @@ spec = do
 
 ```
 
+# Appendix: generic Typelike
+
 ```{.haskell file=src/Typelike.hs}
 {-# language FlexibleInstances     #-}
 {-# language Rank2Types            #-}
@@ -1284,5 +1295,3 @@ import Test.QuickCheck
 
 <<Typelike>>
 ```
-
-# Appendix: generic Typelike
