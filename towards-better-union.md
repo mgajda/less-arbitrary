@@ -878,6 +878,12 @@ any value that satisfies `ObjectConstraint`
 must satisfy by contained `mappingCase`,
 and `recordCase`.
 
+Note that this _intersection approach_
+to conflicting union type constraints enjoys
+_principal type property_ -- principal
+type simply gathers information from different
+angles and handles it separately.
+
 ### Array constraint
 
 Similarly to the object,
