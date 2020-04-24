@@ -13,6 +13,21 @@ dependencies:
 - containers
 - text
 - hspec
+- QuickCheck
+- unordered-containers
+- scientific
+- hspec
+- QuickCheck
+- validity
+- vector
+- unordered-containers
+- scientific
+- validity
+- genvalidity
+- genvalidity-hspec
+- genvalidity-property
+- iso8601-time
+- time
 library:
   source-dirs: src
   exposed-modules:
@@ -23,14 +38,4 @@ tests:
     source-dirs: test
     dependencies:
       - union-types
-      - hspec
-      - QuickCheck
-      - validity
-      - vector
-      - unordered-containers
-      - scientific
-      - validity
-      - genvalidity
-      - genvalidity-hspec
-      - genvalidity-property
 

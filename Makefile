@@ -5,6 +5,8 @@ PDF=out/${SRC:.md=.pdf}
 #TPDF=out/${SRC:.md=_te.pdf}
 HTML=out/${SRC:.md=.html}
 TEX=out/${SRC:.md=.tex}
+DOCX=out/${SRC:.md=.docx}
+REFDOCX=acm_submission_template.docx
 PICS=offset-array-example.eps
 OPTIONS=--mathml				\
 	--filter pandoc-crossref				\
@@ -20,7 +22,7 @@ OPTIONS=--mathml				\
 TEMPLATE=acm-template/new-template.tex
 GNUPLOT=gnuplot
 
-all: out ${PDF} ${HTML} ${TEX} ${TPDF} debug.out
+all: out ${PDF} ${HTML} ${TEX} ${TPDF} ${DOCX} debug.out
 
 # Build a number of formats into the `out/` directory. These will get published via Github pages.
 out:
@@ -48,6 +50,11 @@ ${TEX}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${BIBLIO}
 		--csl=templates/acm-sig-proceedings.csl	\
 		--standalone \
 		-o ${TEX} ${SRC}
+
+${DOCX}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${REFDOCX}
+	pandoc ${OPTIONS} \
+	       --reference-doc ${REFDOCX} \
+		-o ${DOCX} ${SRC}
 
 ${PDF}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${BIBLIO}
 	pandoc ${OPTIONS} \

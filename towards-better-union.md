@@ -485,11 +485,11 @@ data StringConstraint =
   deriving(Eq, Show,Generic)
 
 instance StringConstraint `Types` Text where
-  infer (parseDate -> Right _) = SCDate
-  infer  value                 = SCEnum $
+  infer (parseDate -> Just _) = SCDate
+  infer  value                = SCEnum $
                       Set.singleton value
 
-  check  SCDate     s = isRight $ parseDate s
+  check  SCDate     s = isJust $ parseDate s
   check (SCEnum vs) s = s `Set.member` vs
   check  SCNever    _ = False
   check  SCAny      _ = True
@@ -770,6 +770,18 @@ instance Semigroup   MappingConstraint where
 
 instance Monoid      MappingConstraint where
   mempty = bottom
+
+instance MappingConstraint `Types`
+         Object where
+  infer obj =
+    MappingConstraint
+      (foldMap infer $ Map.keys obj)
+      (foldMap infer            obj)
+  check (MappingConstraint {..}) obj =
+       all (check keyConstraint)
+           (Map.keys obj)
+    && all (check valueConstraint)
+           (Foldable.toList obj)
 ```
 
 Separately we gather information about
@@ -793,11 +805,28 @@ instance Semigroup   RecordConstraint where
   RCTop    <> _        = RCTop
   _        <> RCTop    = RCTop
   a        <> b        = RecordConstraint $
-    undefined -- FIXME
-
+    Map.unionWith (<>) (fields a)
+                       (fields b)
 
 instance Monoid      RecordConstraint where
   mempty = bottom
+
+instance RecordConstraint `Types` Object
+  where
+    infer =  RecordConstraint
+          .  Map.fromList
+          .  fmap (second infer)
+          .  Map.toList
+    check RCTop    _ = True
+    check RCBottom _ = False
+    check rc obj
+            | Map.keys (fields rc)
+           == Map.keys        obj  =
+      and $ Map.elems $
+        Map.intersectionWith  check
+                             (fields rc)
+                              obj
+    check _  _ = False
 ```
 
 Seeing that the two abstract domains above
@@ -836,6 +865,11 @@ instance Semilattice ObjectConstraint where
            }
 
 instance ObjectConstraint `Types` Object where
+  infer v = ObjectConstraint (infer v)
+                             (infer v)
+  check ObjectConstraint {..} v =
+       check mappingCase v
+    && check recordCase  v
 ```
 
 Note that this representation is similar
@@ -893,6 +927,17 @@ instance Monoid ArrayConstraint where
 <<row-constraint>>
 
 instance ArrayConstraint `Types` Array
+  where
+    infer vs =
+      ArrayConstraint
+        (mconcat (infer <$>
+               Foldable.toList vs))
+        (infer              vs)
+    check ArrayConstraint {..} vs =
+         and (check arrayCase <$>
+                Foldable.toList vs)
+      && check rowCase   vs
+
 ```
 
 ### Row constraint
@@ -916,8 +961,20 @@ instance Semilattice RowConstraint where
 instance Monoid RowConstraint where
   mempty = bottom
 
+instance RowConstraint `Types` Array where
+  infer = Row
+        . Foldable.toList
+        . fmap infer
+  check RowTop    _ = True
+  check RowBottom _ = False
+  check (Row rs) vs
+    | length rs == length vs =
+      and $
+        zipWith check                 rs
+                     (Foldable.toList vs)
+  check  _        _ = False
+
 instance Semigroup RowConstraint where
-  <<rowconstraint-standard-lattice-rules>>
   Row bs    <> Row cs
     | length bs /= length cs = RowTop
   Row bs    <> Row cs        =
@@ -930,10 +987,10 @@ with neutral element over content
 type `[UnionType]`.
 
 ```{.haskell #row-constraint-standard-rules .hidden}
-RowBottom <> r         = r
-r         <> RowBottom = r
-RowTop    <> _         = RowTop
-_         <> RowTop    = RowTop
+  RowBottom <> r         = r
+  r         <> RowBottom = r
+  RowTop    <> _         = RowTop
+  _         <> RowTop    = RowTop
 ```
 
 ### Putting it together into a union
@@ -1165,9 +1222,14 @@ in the future.
 {-# language TypeOperators          #-}
 {-# language TypeSynonymInstances   #-}
 {-# language ViewPatterns           #-}
+{-# language RecordWildCards        #-}
 module Unions where
 
+import           Control.Arrow(second, (***), first)
 import           Data.Aeson
+import           Data.Maybe(isJust)
+import qualified Data.Foldable as Foldable
+import           Data.Time.Calendar(Day)
 import           Data.Either
 import           Data.Function(on)
 import           Data.Proxy
@@ -1180,6 +1242,8 @@ import           Data.List(sortBy)
 import qualified Data.HashMap.Strict as Map
 import           Data.HashMap.Strict(HashMap)
 import           GHC.Generics(Generic)
+import           Data.Time.ISO8601
+import           Data.Time.Clock(UTCTime(utctDay))
 
 <<typeclass>>
 <<freetype>>
@@ -1223,8 +1287,10 @@ encodeConstructors (Object o) =
 
 ```{.haskell #missing}
 
-parseDate :: Text -> Either String _
-parseDate = undefined -- FIXME
+parseDate :: Text -> Maybe Day
+parseDate = fmap utctDay
+          . parseISO8601
+          . Text.unpack
 
 ```
 
