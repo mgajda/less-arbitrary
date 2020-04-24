@@ -704,7 +704,7 @@ for different parts of the term:
 }
 ```
 
-```dot { .dot width=33% height=14% #fig:dataflow }
+```{ .dot width=33% height=14% #fig:dataflow }
 digraph {
   margin=0;
   node [shape=box,color=white];
