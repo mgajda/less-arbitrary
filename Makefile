@@ -9,7 +9,7 @@ DOCX=out/${SRC:.md=.docx}
 REFDOCX=acm_submission_template.docx
 PICS=offset-array-example.eps
 OPTIONS=--mathml				\
-	--filter pandoc-crossref				\
+	--filter pandoc-crossref		\
 	--filter pandoc-citeproc		\
 	--filter pandoc-hide-codeblocks		\
 	--highlight-style=haddock		\

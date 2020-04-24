@@ -1200,9 +1200,10 @@ system engineering_ will be more ubiquitous
 in practice, replacing _ad-hoc_ approaches
 in the future.
 
-# Bibliography  {.references}
+# Bibliography
 
-::::: {.refs}
+::::: {#refs}
+
 :::::
 
 # Appendix
