@@ -93,6 +93,7 @@ is a _bounded meet-semilattice_
 class Monoid ty
    => Semilattice ty where
    bottom, top :: ty
+   bottom = mempty
 ```
 Here `bottom` stands for **no information** about possible value
  (empty term,
@@ -124,7 +125,39 @@ with `top` as greatest element,
 and monoid with a neutral element of `bottom`,
 we have a law specific to types.
 
+Since we state it as **information acquisition**,
+we will use a better interface:
+```{.haskell #typelike}
+class Monoid   t
+   => Typelike t where
+   beyond :: t -> Bool
+```
 
+That is because we want more than a single `top`
+element. When typing Haskell, we would
+like `top` to contain error message,
+which makes many.
+In case of union types, we accept that there
+are many elements in the `beyond` set.
+Key property of the `beyond` set, is that it
+is closed to information acquisition:
+```{.haskell #typelike}
+class_law_beyond :: Typelike ty => ty -> ty -> Bool
+class_law_beyond ty1 ty2 =
+  beyond ty1 => beyond (ty1 <> ty2)
+```
+
+It is also important for typing:
+all terms are typed successfully by any value `beyond`.
+```{.haskell #typelike}
+class_law_beyond :: Types ty term => term -> Property
+class_law_beyond term =
+  beyond ty ==> check ty term
+```
+
+For typing we have additional rule:
+type inferred from a term, must always be valid
+for the very same term.
 ``` {.haskell #typelike}
 class_law_types :: Types ty term => term -> Bool
 class_law_types term =
@@ -166,7 +199,7 @@ It is convenient validation when testing a recursive structure of the type.
 
 Alternative way to state properties of considered objects would be
 to define a single class `Typelike`:
-```{.haskell #Typelike}
+```{.haskell #typelike}
 class (Eq   ty
       ,Show ty)
    => Typelike ty where
@@ -180,6 +213,11 @@ instance Typelike ty => Monoid ty where
 instance {-# overlaps #-} Typelike ty => Semigroup ty where
   -- not really
   (<>) = (\/)
+
+class Typelike ty
+   => ty `Types` val where
+   infer :: Proxy ty -> val -> ty
+   check ::       ty -> val -> Bool
 
 typelike_laws :: forall    ty.
                 (Typelike  ty
@@ -236,7 +274,7 @@ since it only considers semilattice with unification operation.
 When we consider **union Typelike**, we also have
 additional laws:
 
-```{.haskell #Typelike}
+```{.haskell #typelike}
 union_types_laws :: forall ty         v.
                           (ty `Types` v
                           ,Arbitrary  v
@@ -258,29 +296,25 @@ that contains only `bottom` for _no sample data received_,
 and `top` for _all values permitted_.
 
 We call this useful case a _presence or absence constraint_:
-```{.haskell #Typelike}
-
-data PresenceConstraint =
+```{.haskell #presence-absence-constraint}
+data PresenceConstraint a =
     Present
   | Absent
   deriving (Eq, Show)
 
-instance Typelike PresenceConstraint where
+instance Typelike (PresenceConstraint a) where
   bottom = Absent
   top    = Present
-  Absent  \/ a       = a
-  a       \/ Absent  = a
-  Present \/ Present = Present
 
-instance PresenceConstraint `Types` a where
-  infer _ _       = Present
+instance Monoid (PresenceConstraint a) where
+  Absent  <> a       = a
+  a       <> Absent  = a
+  Present <> Present = Present
+
+instance PresenceConstraint a `Types` a where
+  infer _         = Present
   check Present _ = True
   check Absent  _ = False
-
-class Typelike ty
-   => ty `Types` val where
-   infer :: Proxy ty -> val -> ty
-   check ::       ty -> val -> Bool
 ```
 
 While it does not look immediately useful
@@ -299,6 +333,17 @@ data Value =
   | Number  Scientific
   | Bool    Bool
   | Null
+```
+
+In order to accomodate both integers
+and exact decimal fractions^[JavaScript and JSON use binary floating point instead, but we stick to the representation chosen by `aeson` library that parses JSON.] in our number
+representation,
+we use decimal floating point[@scientific]:
+
+```{.haskell file=Aeson.hs}
+data Scientific =
+  Scientific { coefficient    :: !Integer
+             , base10Exponent :: Int }
 ```
 
 ## Free union type
@@ -447,28 +492,43 @@ After seeing `true` value we also expect
 `false`, so we can say that the basic constraint
 for a boolean value is its presence or absence.
 
-```{.haskell #presence-absence-constraints}
-type BoolConstraint = Bool
+``` {.haskell #presence-absence-constraints}
+type BoolConstraint = PresenceConstraint
 
-instance Semigroup Bool where
-  (<>) = (||)
+data PresenceConstraint a =
+    Present -- ^ value seen
+  | Absent  -- ^ no information
+  deriving (Eq,Show,Generic)
 
-instance Monoid Bool where
-  mempty = False
+instance Semigroup PresenceConstraint where
+  Present <> _       = Present
+  _       <> Present = Present
+  _       <> _       = Absent
 
-instance Semilattice Bool where
-  bottom = False
-  top    = True
+instance Monoid PresenceConstraint where
+  mempty = Absent
+
+instance Semilattice PresenceConstraint where
+  top    = Present
+  bottom = Absent
 ```
+Here we have basic presence constraint for any non-Void type:
+(...repetition...)
 
+Note that booleans and `null` values are
+both denoted by this trivial `PresenceConstraint`
+constraint.
+
+In other words, we only
+care about presence or absence of their observation.
 That means that constraint for boolean
-is the simplest possible
+is the simplest possible.
 
 The same for `null`, since there is only one
 `null` value.
 
 ``` {.haskell #presence-absence-constraints}
-type NullConstraint = Bool
+type NullConstraint = PresenceConstraint
 ```
 
 #### Simple type constraints
@@ -703,6 +763,38 @@ for different parts of the term:
                       "uid" : 1014}
 }
 ```
+We can add auxiliary information about number of samples seen
+and the constraint will stay `Typelike`:
+```{.haskell #counted}
+
+data Counted a =
+  Counted { count      :: Int
+          , constraint :: a
+          }
+
+instance Semigroup          a
+      => Semigroup (Counted a) where
+  a <> b = Counted (count      a +  count      b)
+                   (constraint a <> constraint b)
+
+instance Monoid  a
+      => Monoid (Counted a) where
+  mempty = Counted 0 mempty
+```
+
+Here we derive `top` from no observations,
+so this case is special:
+```{.haskell #counted
+instance Typelike          a
+      => Typelike (Counted a) where
+  top = Counted 0 top
+```
+
+We can connect `Counted` as parametric functor
+to our types in order to track auxiliary
+information.
+
+# Overall processing scheme
 
 ```{ .dot width=33% height=14% #fig:dataflow }
 digraph {
@@ -1011,8 +1103,8 @@ as mostly generic[@generic-monoid]^[Which likely makes it easily expressible wit
 ```{.haskell #type}
 data UnionType =
   UnionType {
-    unionNull :: Bool
-  , unionBool :: Bool
+    unionNull :: PresenceConstraint ()
+  , unionBool :: PresenceConstraint Bool
   , unionNum  :: NumberConstraint
   , unionStr  :: StringConstraint
   , unionArr  :: ArrayConstraint
@@ -1064,22 +1156,6 @@ instance Semilattice UnionType where
     }
 ```
 
-Note that booleans and `null` values are
-both denoted by trivial `Bool` constraint,
-where truth denotes `top`, and false denotes
-`bottom`. In other words, we only
-care about presence or absence of their observation.
-``` {.haskell #type}
-instance Semigroup Bool where
-  (<>) = (||)
-instance Monoid Bool where
-  mempty = False
-
-instance Semilattice Bool where
-  top = True
-  bottom = False
-```
-
 Inference uses _mutual exclusivity_ of the
 cases, depending on the kind of value.
 This allows as for clear and efficient
@@ -1090,12 +1166,12 @@ of the union:
 ``` {.haskell #union-type-instance}
 
 instance UnionType `Types` Value where
-  infer (Bool   _) = bottom { unionBool = True }
-  infer  Null      = bottom { unionNull = True }
-  infer (Number n) = bottom { unionNum  = infer n }
-  infer (String s) = bottom { unionStr  = infer s }
-  infer (Object o) = bottom { unionObj  = infer o }
-  infer (Array  a) = bottom { unionArr  = infer a }
+  infer (Bool   b) = bottom { unionBool = infer b  }
+  infer  Null      = bottom { unionNull = infer () }
+  infer (Number n) = bottom { unionNum  = infer n  }
+  infer (String s) = bottom { unionStr  = infer s  }
+  infer (Object o) = bottom { unionObj  = infer o  }
+  infer (Array  a) = bottom { unionArr  = infer a  }
   check UnionType { unionNum } (Number n) =
               check unionNum           n
   check UnionType { unionStr } (String s) =
@@ -1104,9 +1180,6 @@ instance UnionType `Types` Value where
               check unionObj           o
   check UnionType { unionArr } (Array  a) =
               check unionArr           a
-```
-```{.haskell .hidden #union-type-instance}
--- FIXME: Use presence/absence for clarity not bool
 ```
 
 ## Heuristics for better types
@@ -1257,8 +1330,10 @@ import           Data.Time.Clock(UTCTime(utctDay))
 <<basic-constraints>>
 <<array-constraint>>
 <<object-constraint>>
+<<presence-absence-constraints>>
 <<union-type-instance>>
 <<type>>
+<<counted>>
 
 <<missing>>
 ```
@@ -1298,7 +1373,6 @@ parseDate :: Text -> Maybe Day
 parseDate = fmap utctDay
           . parseISO8601
           . Text.unpack
-
 ```
 
 ```{.haskell file=test/Spec.hs .hidden}
