@@ -71,7 +71,137 @@ we show results of
 previously described tools,
 and this more principled approach.
 
+## Related work
+
+F# type providers for JSON allow to automatically
+derive schema, but the type system is
+_ad-hoc_[@type-providers-f-sharp].
+
+There was a previous effort to apply union types
+to JSON inference to generate Haskell
+types[@json-autotype-presi],
+but it also lacks a rigorous formal treatment.
+
+Another attempt to automatically infer schemas
+also in the PADS project [@pads],
+but it does not provide a generalized type system
+design methodology.
+
+There is a program called [@quicktype] that
+tries to derive types with the Markov chains
+but its cost requires much more engineering
+time since unit tests are case-by-case,
+and again there is little underlying theory.
+
+Thus we have precedents of past work
+that deliver partially satisfactory results,
+that we want to expand in order
+to systematically add more and more features.
+
+# Motivation
+
+## Motivating examples
+
+Now let's give some motivating examples from realm of JSON API types:
+
+1. Subsets of constructors:
+  * _API argument is email_ - this is subset of valid `String` values, that we can usefully validate on the client.
+  * _Page size determines number of results to return (min: 10, max:10000)_ - this is also a subset of `Int` values between `10`, and `10000`
+  * _`timestamp` contains ISO8601 date_ -- that is `String` like `"2019-03-03"` but not like `"The third day of March of the year 2019"`
+2. Optional fields:
+  * _Page size is 100 by default_ - that is we have `{"page_size": 50}` or `{}`
+3. Variant fields:
+  * _Answer to the query is either a number of of registered objects, or String `"unavailable"`_ - this is `Int` value or a `String`
+4. Variant records:
+  * _Answer contains either text message with user id, or an error._ -- That is either:
+```{.json}
+{"message" : "Where can I submit my proposal?", "uid"  : 1014}
+{"error"   : "Authorization failed",            "code" :  401}
+```
+
+5. Arrays in place of records^[Which strikes author as a bad practice, but we want to handle it nevertheless. Possible with `--bad-array-records` option.]:
+``` {.json file=example5.json}
+
+[
+  [1, "Nick",    null       ]
+, [2, "George", "2019-04-11"]
+, [3, "Olivia", "1984-05-03"]
+]
+```
+
+6. Maps of identical objects^[Example taken from @quicktype.]:
+``` { .json file=test/example6.json }
+{
+    "6408f5": {
+        "size": 969709,
+        "height": 510599,
+        "difficulty": 866429.732,
+        "previous": "54fced"
+	},
+	"54fced": {
+	    "size": 991394,
+        "height": 510598,
+        "difficulty": 866429.823,
+        "previous": "6c9589"
+	},
+	"6c9589": {
+        "size": 990527,
+        "height": 510597,
+        "difficulty": 866429.931,
+        "previous": "51a0cb"
+	}
+}
+```
+
+## What is the point of inference?
+
+Given another undocumented (or wrongly labelled) JSON API, we want to read the input
+into Haskell, and avoid checking for _unexpected_ deviations of the format.
+At the same time, we want to accept all known valid inputs outright,
+so that we can use types^[And compiler feature of checking for unmatched cases.]
+to make sure we exhaustively treat the input.
+
+Thus we can assume that the smallest non-singleton set is a better approximation type than a singleton.
+We call it _minimal containing set principle_.
+
+Second we can prefer types that allow for _less degrees of freedom_ than the others,
+while conforming to some commonly occuring structure. We call it _information content principle_.
+
+Given these principles, and examples of frequently occuring patterns,
+we can infer a reasonable _world of types_ that would be used as approximations,
+instead of making this creation ad-hoc. That is _type system engineering_,
+that allows us to derive type system design directly from information on data structures
+and likelihood of their occurence.
+
 # Problem definition
+
+## Preliminaries
+
+### JSON values
+
+Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
+``` {.haskell file=Aeson.hs}
+data Value =
+    Object (Map String Value)
+  | Array  [Value]
+  | String  Text
+  | Number  Scientific
+  | Bool    Bool
+  | Null
+```
+
+In order to accomodate both integers
+and exact decimal fractions^[JavaScript and JSON use binary floating point instead, but we stick to the representation chosen by `aeson` library that parses JSON.] in our number
+representation,
+we use decimal floating point[@scientific]:
+
+```{.haskell file=Aeson.hs}
+data Scientific =
+  Scientific { coefficient    :: !Integer
+             , base10Exponent :: Int }
+```
+
+## Defining type inference
 
 If inference fails, we can always correct it by adding additional example.
 
@@ -128,8 +258,10 @@ we have a law specific to types.
 Since we state it as **information acquisition**,
 we will use a better interface:
 ```{.haskell #typelike}
-class Monoid   t
-   => Typelike t where
+class (Monoid   t
+      ,Eq       t
+      ,Show     t)
+   =>  Typelike t where
    beyond :: t -> Bool
 ```
 
@@ -195,25 +327,11 @@ digraph type {
 And laws
 It is convenient validation when testing a recursive structure of the type.
 
-### Definition of typelike
+### Typing relation
 
 Alternative way to state properties of considered objects would be
 to define a single class `Typelike`:
 ```{.haskell #typelike}
-class (Eq   ty
-      ,Show ty)
-   => Typelike ty where
-  bottom, top :: ty
-  (\/) :: ty -> ty -> ty
-
-instance Typelike ty => Monoid ty where
-  mappend = (\/)
-  mempty  = bottom
-
-instance {-# overlaps #-} Typelike ty => Semigroup ty where
-  -- not really
-  (<>) = (\/)
-
 class Typelike ty
    => ty `Types` val where
    infer :: Proxy ty -> val -> ty
@@ -227,14 +345,14 @@ typelike_laws :: forall    ty.
 typelike_laws (Proxy :: Proxy ty) name =
   describe ("Typelike " <> name) $ do
     describe "bottom is neutral element" $ do
-      prop "left"  $ \t -> bottom \/ t      == (t   :: ty)
-      prop "right" $ \t -> t      \/ bottom == (t   :: ty)
+      prop "left"  $ \t -> bottom <> t      == (t   :: ty)
+      prop "right" $ \t -> t      <> bottom == (t   :: ty)
     describe "top is absorbing element" $ do
-      prop "left"  $ \t -> top    \/ t      == (top :: ty)
-      prop "right" $ \t -> t      \/ top    == (top :: ty)
-    prop "commutative" $ \t u -> t \/ u == u \/ (t  :: ty)
-    prop "associative" $ \t u v ->  t \/ (u  \/  v)
-                                == (t \/  u) \/ (v  :: ty)
+      prop "left"  $ \t -> top    <> t      == (top :: ty)
+      prop "right" $ \t -> t      <> top    == (top :: ty)
+    prop "commutative" $ \t u -> t <> u == u <> (t  :: ty)
+    prop "associative" $ \t u v ->  t <> (u  <>  v)
+                                == (t <>  u) <> (v  :: ty)
 ```
 
 Here:
@@ -295,247 +413,14 @@ Minimal `Typelike` instance would be one
 that contains only `bottom` for _no sample data received_,
 and `top` for _all values permitted_.
 
-We call this useful case a _presence or absence constraint_:
-```{.haskell #presence-absence-constraint}
-data PresenceConstraint a =
-    Present
-  | Absent
-  deriving (Eq, Show)
-
-instance Typelike (PresenceConstraint a) where
-  bottom = Absent
-  top    = Present
-
-instance Monoid (PresenceConstraint a) where
-  Absent  <> a       = a
-  a       <> Absent  = a
-  Present <> Present = Present
-
-instance PresenceConstraint a `Types` a where
-  infer _         = Present
-  check Present _ = True
-  check Absent  _ = False
-```
-
-While it does not look immediately useful
-in context where we always have at least one value
-on input, it is important where we can receive empty
-array (and thus no values for the element type.)
-
-## Value domain
-
-Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
-``` {.haskell file=Aeson.hs}
-data Value =
-    Object (Map String Value)
-  | Array  [Value]
-  | String  Text
-  | Number  Scientific
-  | Bool    Bool
-  | Null
-```
-
-In order to accomodate both integers
-and exact decimal fractions^[JavaScript and JSON use binary floating point instead, but we stick to the representation chosen by `aeson` library that parses JSON.] in our number
-representation,
-we use decimal floating point[@scientific]:
-
-```{.haskell file=Aeson.hs}
-data Scientific =
-  Scientific { coefficient    :: !Integer
-             , base10Exponent :: Int }
-```
-
-## Free union type
-
-Now for a term with constructors we can infer "free" type for every term:
-For any `T` value type Set T` satisfies our notion of _free type_.
-``` { .haskell #freetype }
-data FreeType a = FreeType { captured :: Set a }
-                | Full
-
-instance (Ord a, Eq a) => Semigroup (FreeType a) where
-  a <> b = FreeType $ (Set.union `on` captured) a b -- mappend
-instance (Ord a, Eq a) => Monoid (FreeType a) where
-  mempty  = FreeType Set.empty
-
-instance (Ord a, Eq a) => Semilattice (FreeType a) where
-  bottom = mempty
-  top    = Full
-
-instance (Ord      a
-         ,Eq       a)
-      =>  FreeType a `Types` a where
-  infer                    = FreeType . Set.singleton
-  check Full         _term = True
-  check (FreeType s)  term = term `Set.member` s
-```
-
-
-This definition is sound, and for a finite realm of values, may make a sense.
-For a set of inputs^[Conforming to Haskell and JSON syntax, we use list for marking the elements of the set.]:
-`["yes", "no", "error"]`, we might reasonably say that type is indeed
-a good approximation of C-style enumeration, or Haskell-style ADT without constructor arguments.
-
-What is wrong with this notion of _free type_?
-It does not generalize at all to infinite and recursive domains! It only allows the objects from the sample, and nothing more.
-
-## Type system engineering principles
-
-Given that we want to infer the type from finite number of samples
-we are presented with _learning problem_,
-so we need to use _prior_ knowledge of the domain
-to generalize when inferring types.
-
-Clearly after seeing `a: false` we can expect that it is sometimes `a: true`.
-After seeing `b: 123` we expect that `b: 100` would also be acceptable.
-That means that we need our typing to _learn a reasonable general class from few instances._
-That defines making a practical type system as inference problem.
-
-Since our goal is to deliver most descriptive^[Shortest, by information complexity principle.]
-types, we will assume that we need to abstract a bit from the _free type_ and take on larger
-sets whenever it seems justified.
-
-Another principle is that of **correct operation**,
-where given operations on types, we try to find a minimal types
-that assure correct operation unexpected errors.
-
-Indeed we want to use this theory to infer a type definition from a finite set of examples,
-but we also want it to generalize to infinite types.
-
-Aiming for this, we set the rules of type design:
-
-* type should have a finite description
-* inference must be contravariant functor with regards to constructors, for `{"a": X, "b": Y}` is types
-  by `T x y`,
-  then `X :: x` and `Y :: y` must be also a valid typing.
-
-
-## Motivating examples
-
-Now let's give some motivating examples from realm of JSON API types:
-
-1. Subsets of constructors:
-  * _API argument is email_ - this is subset of valid `String` values, that we can usefully validate on the client.
-  * _Page size determines number of results to return (min: 10, max:10000)_ - this is also a subset of `Int` values between `10`, and `10000`
-  * _`timestamp` contains ISO8601 date_ -- that is `String` like `"2019-03-03"` but not like `"The third day of March of the year 2019"`
-2. Optional fields:
-  * _Page size is 100 by default_ - that is we have `{"page_size": 50}` or `{}`
-3. Variant fields:
-  * _Answer to the query is either a number of of registered objects, or String `"unavailable"`_ - this is `Int` value or a `String`
-4. Variant records:
-  * _Answer contains either text message with user id, or an error._ -- That is either:
-```{.json}
-{"message" : "Where can I submit my proposal?", "uid"  : 1014}
-{"error"   : "Authorization failed",            "code" :  401}
-```
-
-5. Arrays in place of records^[Which strikes author as a bad practice, but we want to handle it nevertheless. Possible with `--bad-array-records` option.]:
-``` {.json file=example5.json}
-
-[
-  [1, "Nick",    null       ]
-, [2, "George", "2019-04-11"]
-, [3, "Olivia", "1984-05-03"]
-]
-```
-
-6. Maps of identical objects:
-``` { .json file=test/example6.json }
-{
-    "6408f5": {
-        "size": 969709,
-        "height": 510599,
-        "difficulty": 866429.732,
-        "previous": "54fced"
-	},
-	"54fced": {
-	    "size": 991394,
-        "height": 510598,
-        "difficulty": 866429.823,
-        "previous": "6c9589"
-	},
-	"6c9589": {
-        "size": 990527,
-        "height": 510597,
-        "difficulty": 866429.931,
-        "previous": "51a0cb"
-	}
-}
-```
-
-### What is the point of inference?
-
-Given another undocumented (or wrongly labelled) JSON API, we want to read the input
-into Haskell, and avoid checking for _unexpected_ deviations of the format.
-At the same time, we want to accept all known valid inputs outright,
-so that we can use types^[And compiler feature of checking for unmatched cases.]
-to make sure we exhaustively treat the input.
-
-Thus we can assume that the smallest non-singleton set is a better approximation type than a singleton.
-We call it _minimal containing set principle_.
-
-Second we can prefer types that allow for _less degrees of freedom_ than the others,
-while conforming to some commonly occuring structure. We call it _information content principle_.
-
-Given these principles, and examples of frequently occuring patterns,
-we can infer a reasonable _world of types_ that would be used as approximations,
-instead of making this creation ad-hoc. That is _type system engineering_,
-that allows us to derive type system design directly from information on data structures
-and likelihood of their occurence.
-
-### Which of these types we may infer?
-
-#### Presence and absence constraints
-
-After seeing `true` value we also expect
-`false`, so we can say that the basic constraint
-for a boolean value is its presence or absence.
-
-``` {.haskell #presence-absence-constraints}
-type BoolConstraint = PresenceConstraint
-
-data PresenceConstraint a =
-    Present -- ^ value seen
-  | Absent  -- ^ no information
-  deriving (Eq,Show,Generic)
-
-instance Semigroup PresenceConstraint where
-  Present <> _       = Present
-  _       <> Present = Present
-  _       <> _       = Absent
-
-instance Monoid PresenceConstraint where
-  mempty = Absent
-
-instance Semilattice PresenceConstraint where
-  top    = Present
-  bottom = Absent
-```
-Here we have basic presence constraint for any non-Void type:
-(...repetition...)
-
-Note that booleans and `null` values are
-both denoted by this trivial `PresenceConstraint`
-constraint.
-
-In other words, we only
-care about presence or absence of their observation.
-That means that constraint for boolean
-is the simplest possible.
-
-The same for `null`, since there is only one
-`null` value.
-
-``` {.haskell #presence-absence-constraints}
-type NullConstraint = PresenceConstraint
-```
-
 #### Simple type constraints
 
 1. Given a sample of values, we can have a reasonable approximation of expected values:
   - use `String` versus `Int` outright, instead of any JSON `Value`.
   - assuming that we have a set of parsers that are mutually exclusive, we can implement this for `String` values:
+
+#### Constraints on string type
+
 ``` {.haskell #basic-constraints}
 data StringConstraint =
     SCDate
@@ -571,6 +456,8 @@ instance Semilattice StringConstraint where
   bottom = SCNever
   top    = SCAny
 ```
+
+#### Constraints on number type
 
 2. Analogically we may infer for integer constraints^[Program makes it optional `--infer-int-ranges`.] as:
 ```{.haskell #basic-constraints}
@@ -633,6 +520,129 @@ instance Monoid NumberConstraint where
   mempty = bottom
 ```
 
+## Free union type
+
+Now for a term with constructors we can infer "free" type for every term:
+For any `T` value type Set T` satisfies our notion of _free type_.
+``` { .haskell #freetype }
+data FreeType a = FreeType { captured :: Set a }
+                | Full
+
+instance (Ord a, Eq a) => Semigroup (FreeType a) where
+  a <> b = FreeType $ (Set.union `on` captured) a b -- mappend
+instance (Ord a, Eq a) => Monoid (FreeType a) where
+  mempty  = FreeType Set.empty
+
+instance (Ord a, Eq a) => Semilattice (FreeType a) where
+  bottom = mempty
+  top    = Full
+
+instance (Ord      a
+         ,Eq       a)
+      =>  FreeType a `Types` a where
+  infer                    = FreeType . Set.singleton
+  check Full         _term = True
+  check (FreeType s)  term = term `Set.member` s
+```
+
+
+This definition is sound, and for a finite realm of values, may make a sense.
+For a set of inputs^[Conforming to Haskell and JSON syntax, we use list for marking the elements of the set.]:
+`["yes", "no", "error"]`, we might reasonably say that type is indeed
+a good approximation of C-style enumeration, or Haskell-style ADT without constructor arguments.
+
+What is wrong with this notion of _free type_?
+It does not generalize at all to infinite and recursive domains! It only allows the objects from the sample, and nothing more.
+
+## Presence and absence constraint
+
+We call this useful case a _presence or absence constraint_:
+```{.haskell #presence-absence-constraint}
+data PresenceConstraint a =
+    Present
+  | Absent
+  deriving (Eq, Show)
+
+instance Typelike (PresenceConstraint a) where
+  bottom = Absent
+  top    = Present
+
+instance Monoid (PresenceConstraint a) where
+  Absent  <> a       = a
+  a       <> Absent  = a
+  Present <> Present = Present
+
+instance PresenceConstraint a `Types` a where
+  infer _         = Present
+  check Present _ = True
+  check Absent  _ = False
+```
+
+While it does not look immediately useful
+in context where we always have at least one value
+on input, it is important where we can receive empty
+array (and thus no values for the element type.)
+
+### Which of these types we may infer?
+
+#### Presence and absence constraints
+
+After seeing `true` value we also expect
+`false`, so we can say that the basic constraint
+for a boolean value is its presence or absence.
+
+``` {.haskell #presence-absence-constraints}
+type BoolConstraint = PresenceConstraint
+
+data PresenceConstraint a =
+    Present -- ^ value seen
+  | Absent  -- ^ no information
+  deriving (Eq,Show,Generic)
+
+instance Semigroup PresenceConstraint where
+  Present <> _       = Present
+  _       <> Present = Present
+  _       <> _       = Absent
+
+instance Monoid PresenceConstraint where
+  mempty = Absent
+
+instance Semilattice PresenceConstraint where
+  top    = Present
+  bottom = Absent
+```
+Here we have basic presence constraint for any non-Void type:
+(...repetition...)
+
+Note that booleans and `null` values are
+both denoted by this trivial `PresenceConstraint`
+constraint.
+
+In other words, we only
+care about presence or absence of their observation.
+That means that constraint for boolean
+is the simplest possible.
+
+The same for `null`, since there is only one
+`null` value.
+
+``` {.haskell #presence-absence-constraints}
+type NullConstraint = PresenceConstraint
+```
+
+### Selecting basic priors
+
+Now that we defined the type system engineering
+as prior selection, let's state some obvious rules
+for the typing:
+
+We generalize basic datatypes.
+
+Note that we treat `null` as separate basic types,
+that can form union with any other.
+Thus `bottom` indicates _no type and no value_.
+The `top` of our semilattice is the type of any `Value` term.
+
 #### Variants
 
 Variant fields for union types are also simple, we implement them with a cousin of `Either` type
@@ -693,139 +703,6 @@ With more samples, the pattern emerges:
 {"error"  : "Missing user",
     "code":  404}
 ```
-
-### Selecting basic priors
-
-Now that we defined the type system engineering
-as prior selection, let's state some obvious rules
-for the typing:
-
-1. We generalize basic datatypes:
-
-Note that we treat `null` as separate basic types,
-that can form union with any other.
-Thus `bottom` indicates _no type and no value_.
-The `top` of our semilattice is the type of any `Value` term.
-
-2. We allow for unification of basic types, by typewise unification:
-```{.haskell #json-types-instance}
-    infer (TUnion { bool, int,  :: TPresent
-                  })
-```
-
-### Conflicting alternatives
-
-Crux of union type systems have been long
-dealing with conflicting types on the input.
-
-Motivated by examples above, we want to also deal
-with conflicting alternative assignments.
-
-It is apparent that examples 4. to 6.
-hint at more than one assignment:
-
-5. Either a list of lists of values that are one of `Int`, `String`, or `null`, or a table that has the same (and predefined) type
-for each
-
-6. Either a record of fixed names,
-or the mapping from hash to a single object type.
-
-
-### Number of samples
-
-How can we make sure that we have a right number of samples?
-This is another example:
-```json
-{"samples" : [
-    {"error"   : "Authorization failed",
-        "code" :  401}
-  , {"message" : "Where can I submit my proposal?",
-        "uid"  : 1014}
-  , {"message" : "Sent it to HotCRP",
-        "uid"  :   93}
-  , {"message" : "Thanks!",
-        "uid"  : 1014}
-  , {"error"   : "Authorization failed",
-        "code" :  401}
-  ]
-}
-```
-First we need to identify it as a list of same elements,
-and then to notice, that there are multiple instances of each record example.
-That suggests that the best would be to use not sets, but multisets
-of inferred records, and attempt to minimize the term.
-
-Next is detection of similarities between type descriptions developed
-for different parts of the term:
-```json
-{"samples"      :  ...,
- "last_message" : {"message": "Thanks!",
-                      "uid" : 1014}
-}
-```
-We can add auxiliary information about number of samples seen
-and the constraint will stay `Typelike`:
-```{.haskell #counted}
-
-data Counted a =
-  Counted { count      :: Int
-          , constraint :: a
-          }
-
-instance Semigroup          a
-      => Semigroup (Counted a) where
-  a <> b = Counted (count      a +  count      b)
-                   (constraint a <> constraint b)
-
-instance Monoid  a
-      => Monoid (Counted a) where
-  mempty = Counted 0 mempty
-```
-
-Here we derive `top` from no observations,
-so this case is special:
-```{.haskell #counted
-instance Typelike          a
-      => Typelike (Counted a) where
-  top = Counted 0 top
-```
-
-We can connect `Counted` as parametric functor
-to our types in order to track auxiliary
-information.
-
-# Overall processing scheme
-
-```{ .dot width=33% height=14% #fig:dataflow }
-digraph {
-  margin=0;
-  node [shape=box,color=white];
-  rankdir=LR;
-  subgraph g1 {
-    "JSON Value";
-    "Free type";
-    rank=same;
-  }
-  subgraph g2 {
-    "Local generalization";
-    "Match similar";
-    rank=same;
-  }
-  subgraph g3 {
-    "Unify similar";
-    "Produce type" [label="Produce type mapping"];
-    rank=same;
-  }
-  "JSON Value" -> "Free type" -> "Local generalization" -> "Match similar" -> "Unify similar" -> "Produce type" -> "Haskell code";
-}
-```
-
-Thus at each step we might want to keep a **cardinality** of each possible value,
-and given enough samples, attempt to detect patterns ^[If we detect pattern to early, we risk make our types to narrow to work with actual API answers.].
-
-In order to preserve efficiency, we might want to merge whenever, number of alternatives in the multiset crosses the threshold.
-^[Option `--max-alternative-constructors=N`]
-And only attempt to narrow strings when cardinality crosses the threshold ^[Option `--min-enumeration-cardinality`.]
 
 ### Object constraint
 
@@ -1181,6 +1058,96 @@ instance UnionType `Types` Value where
   check UnionType { unionArr } (Array  a) =
               check unionArr           a
 ```
+### Overlapping alternatives
+
+Crux of union type systems have been long
+dealing with conflicting types on the input.
+
+Motivated by examples above, we want to also deal
+with conflicting alternative assignments.
+
+It is apparent that examples 4. to 6.
+hint at more than one assignment:
+
+5. Either a list of lists of values that are one of `Int`, `String`, or `null`, or a table that has the same (and predefined) type
+for each
+
+6. Either a record of fixed names,
+or the mapping from hash to a single object type.
+
+
+### Counting observations
+
+How can we make sure that we have a right number of samples?
+This is another example:
+```json
+{"samples" : [
+    {"error"   : "Authorization failed",
+        "code" :  401}
+  , {"message" : "Where can I submit my proposal?",
+        "uid"  : 1014}
+  , {"message" : "Sent it to HotCRP",
+        "uid"  :   93}
+  , {"message" : "Thanks!",
+        "uid"  : 1014}
+  , {"error"   : "Authorization failed",
+        "code" :  401}
+  ]
+}
+```
+First we need to identify it as a list of same elements,
+and then to notice, that there are multiple instances of each record example.
+That suggests that the best would be to use not sets, but multisets
+of inferred records, and attempt to minimize the term.
+
+Next is detection of similarities between type descriptions developed
+for different parts of the term:
+```json
+{"samples"      :  ...,
+ "last_message" : {"message": "Thanks!",
+                      "uid" : 1014}
+}
+```
+We can add auxiliary information about number of samples seen
+and the constraint will stay `Typelike`:
+```{.haskell #counted}
+
+data Counted a =
+  Counted { count      :: Int
+          , constraint :: a
+          }
+
+instance Semigroup          a
+      => Semigroup (Counted a) where
+  a <> b = Counted (count      a +  count      b)
+                   (constraint a <> constraint b)
+
+instance Monoid  a
+      => Monoid (Counted a) where
+  mempty = Counted 0 mempty
+```
+
+Here we derive `top` from no observations,
+so this case is special:
+```{.haskell #counted
+instance Typelike          a
+      => Typelike (Counted a) where
+  top = Counted 0 top
+```
+
+We can connect `Counted` as parametric functor
+to our types in order to track auxiliary
+information.
+
+Thus at each step we might want to keep a **cardinality** of each possible value,
+and given enough samples, attempt to detect patterns ^[If we detect pattern to early, we risk make our types to narrow to work with actual API answers.].
+
+In order to preserve efficiency, we might want to merge whenever, number of alternatives in the multiset crosses the threshold.
+^[Option `--max-alternative-constructors=N`]
+And only attempt to narrow strings when cardinality crosses the threshold ^[Option `--min-enumeration-cardinality`.]
+
+# Choosing representation
+
 
 ## Heuristics for better types
 
@@ -1206,21 +1173,33 @@ That is because, our program must not have any assumptions
 about these values, but at the same it should be able to
 output them for debugging purposes.
 
-### Scaling to type environments
+## Overall processing scheme
 
-For now we have only discussed typing
-of treelike values. However, it is natural
-to scale this approach to multiple types in
-API, where different types are referred to by
-name, and possibly contain each other.
+```{ .dot width=33% height=14% #fig:dataflow }
+digraph {
+  margin=0;
+  node [shape=box,color=white];
+  rankdir=LR;
+  subgraph g1 {
+    "JSON Value";
+    "Free type";
+    rank=same;
+  }
+  subgraph g2 {
+    "Local generalization";
+    "Match similar";
+    rank=same;
+  }
+  subgraph g3 {
+    "Unify similar";
+    "Produce type" [label="Produce type mapping"];
+    rank=same;
+  }
+  "JSON Value" -> "Free type" -> "Local generalization" -> "Match similar" -> "Unify similar" -> "Produce type" -> "Haskell code";
+}
+```
 
-To address this situation, we show
-that environment of typelikes is also `Typelike`,
-and constraint unification can be  extended the same
-way.
-
-
-### Simplification by finding unification candidates
+## Simplification by finding unification candidates
 
 In most JSON documents we found that
 the same object was described in different
@@ -1236,20 +1215,50 @@ of relying on automation.
 We found that this greatly decreases complexity of the types,
 and makes output less redundant.
 
-## Related work
+# Future work
 
-F# type providers for JSON allow to automatically
-derive schema, but the type system is
-_ad-hoc_[@type-providers-f-sharp].
-There was attempt to automatically infer schemas
-also in the PADS project [@pads],
-but it does not provide a generalized type system
-design methodology.
-There is a program called [@quicktype] that
-tries to derive types with the Markov chains
-but its cost requires much more engineering
-time since unit tests are case-by-case,
-and there is no little underlying theory.
+## Scaling to type environments
+
+For now we have only discussed typing
+of treelike values. However, it is natural
+to scale this approach to multiple types in
+API, where different types are referred to by
+name, and possibly contain each other.
+
+To address this situation, we show
+that environment of typelikes is also `Typelike`,
+and constraint unification can be  extended the same
+way.
+
+## Type system engineering principles
+
+Given that we want to infer the type from finite number of samples
+we are presented with _learning problem_,
+so we need to use _prior_ knowledge of the domain
+to generalize when inferring types.
+
+Clearly after seeing `a: false` we can expect that it is sometimes `a: true`.
+After seeing `b: 123` we expect that `b: 100` would also be acceptable.
+That means that we need our typing to _learn a reasonable general class from few instances._
+That defines making a practical type system as inference problem.
+
+Since our goal is to deliver most descriptive^[Shortest, by information complexity principle.]
+types, we will assume that we need to abstract a bit from the _free type_ and take on larger
+sets whenever it seems justified.
+
+Another principle is that of **correct operation**,
+where given operations on types, we try to find a minimal types
+that assure correct operation unexpected errors.
+
+Indeed we want to use this theory to infer a type definition from a finite set of examples,
+but we also want it to generalize to infinite types.
+
+Aiming for this, we set the rules of type design:
+
+* type should have a finite description
+* inference must be contravariant functor with regards to constructors, for `{"a": X, "b": Y}` is types
+  by `T x y`,
+  then `X :: x` and `Y :: y` must be also a valid typing.
 
 ## Conclusion
 
