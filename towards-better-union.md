@@ -131,7 +131,7 @@ Now let's give some motivating examples from realm of JSON API types:
 1. Subsets of constructors:
   * _API argument is and email_ - this is subset of valid `String` values, that we can usefully validate on the client.
   * _Page size determines number of results to return (min: 10, max:10000)_ - this is also a subset of `Int` values between `10`, and `10000`
-  * _`timestamp` contains ISO8601 date_ -- that is `String` like `"2019-03-03"` but not like `"The third day of March of the year 2019"`
+  * _`date` contains ISO8601 date_ -- contains a `String` in format `"2019-03-03"` but not `String` in format `"The third day of the month of March, Anno Domini 2019"`
 2. Optional fields:
   * _Page size is 100 by default_ - that is we have `{"page_size": 50}` or `{}`
 3. Variant fields:
@@ -259,8 +259,8 @@ In the domain of permissive union types,
 or fully dynamic value, when we gathered
 information that places any possible value inside the type.
 At first reading one may be tempted to claim
-that `beyond` set should consists of only the `beyond`
-element.
+that `beyond` set should consists of only a single element -- the `top`.
+
 However, since we defined **unification**
 operator `<>`, as **information fusion**,
 we might have difficulty in assuring
