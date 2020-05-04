@@ -472,9 +472,8 @@ instance Monoid StringConstraint where
   mappend = (<>)
   mempty  = SCNever
 
-instance Semilattice StringConstraint where
-  mempty = SCNever
-  beyond    = SCAny
+instance Typelike StringConstraint where
+  beyond  = SCAny
 ```
 
 #### Constraints on number type
@@ -493,12 +492,11 @@ instance Semigroup IntConstraint where
   IntRange a b <> IntRange c d =
                   IntRange (min a c) (max b d)
 
-instance Semilattice IntConstraint where
-  mempty = IntNever
-  beyond    = IntAny
+instance Typelike IntConstraint where
+  beyond = (==IntAny)
 
 instance Monoid IntConstraint where
-  mempty = mempty
+  mempty = IntNever
 ```
 
 JavaScript has one number type that holds both `Float` and `Int`, so JSON inherits that:
@@ -509,9 +507,8 @@ data NumberConstraint =
   | NCFloat
   deriving(Eq,Show,Generic)
 
-instance Semilattice NumberConstraint where
-  mempty = NCNever
-  beyond    = NCFloat
+instance Typelike NumberConstraint where
+  beyond = (==NCFloat)
 
 instance Semigroup NumberConstraint where
   <<standard-rules-number-constraint>>
@@ -553,9 +550,8 @@ instance (Ord a, Eq a) => Semigroup (FreeType a) where
 instance (Ord a, Eq a) => Monoid (FreeType a) where
   mempty  = FreeType Set.empty
 
-instance (Ord a, Eq a) => Semilattice (FreeType a) where
-  mempty = mempty
-  beyond    = Full
+instance (Ord a, Eq a) => Typelike (FreeType a) where
+  beyond    = (==Full)
 
 instance (Ord      a
          ,Eq       a)
@@ -627,9 +623,8 @@ instance Semigroup PresenceConstraint where
 instance Monoid PresenceConstraint where
   mempty = Absent
 
-instance Semilattice PresenceConstraint where
-  beyond    = Present
-  mempty = Absent
+instance Typelike PresenceConstraint where
+  beyond = (==Present)
 ```
 Here we have basic presence constraint for any non-Void type:
 (...repetition...)
@@ -739,11 +734,13 @@ data MappingConstraint =
     , valueConstraint :: UnionType
     } deriving (Eq, Show, Generic)
 
-instance Semilattice MappingConstraint where
+instance Monoid MappingConstraint where
   mempty = MappingConstraint {
       keyConstraint   = mempty
     , valueConstraint = mempty
     }
+
+instance Typelike MappingConstraint where
   beyond = MappingConstraint {
       keyConstraint   = beyond
     , valueConstraint = beyond
@@ -784,9 +781,8 @@ data RecordConstraint =
         fields :: HashMap Text UnionType
       } deriving (Show,Eq,Generic)
 
-instance Semilattice RecordConstraint where
-  mempty = RCBottom
-  beyond    = RCTop
+instance Typelike RecordConstraint where
+  beyond = (==RCTop)
 
 instance Semigroup   RecordConstraint where
   RCBottom <> a        = a
@@ -841,17 +837,15 @@ instance Semigroup ObjectConstraint where
     }
 
 instance Monoid ObjectConstraint where
-  mempty = mempty
-
-instance Semilattice ObjectConstraint where
   mempty = ObjectConstraint {
              mappingCase = mempty
            , recordCase  = mempty
            }
-  beyond    = ObjectConstraint {
-             mappingCase = beyond
-           , recordCase  = beyond
-           }
+
+instance Typelike ObjectConstraint where
+  beyond ObjectConstraint {..} =
+       beyond mappingCase
+    && beyond recordCase
 
 instance ObjectConstraint `Types` Object where
   infer v = ObjectConstraint (infer v)
@@ -899,15 +893,16 @@ data ArrayConstraint  = ArrayConstraint {
   }
   deriving (Show, Eq, Generic)
 
-instance Semilattice ArrayConstraint where
+instance Monoid ArrayConstraint where
   mempty = ArrayConstraint {
              arrayCase = mempty
            , rowCase   = mempty
            }
-  beyond = ArrayConstraint {
-          arrayCase = beyond
-        , rowCase   = beyond
-        }
+
+instance Typelike ArrayConstraint where
+  beyond ArrayConstraint {..} =
+       beyond arrayCase
+    && beyond rowCase
 
 instance Semigroup ArrayConstraint where
   a1 <> a2 =
@@ -915,9 +910,6 @@ instance Semigroup ArrayConstraint where
       arrayCase = ((<>) `on` arrayCase) a1 a2
     , rowCase   = ((<>) `on` rowCase  ) a1 a2
     }
-
-instance Monoid ArrayConstraint where
-  mempty = mempty
 
 <<row-constraint>>
 
@@ -949,12 +941,11 @@ data RowConstraint =
    | Row       [UnionType]
    deriving (Eq,Show,Generic)
 
-instance Semilattice RowConstraint where
-  mempty = RowBottom
+instance Typelike RowConstraint where
   beyond = (==RowTop)
 
 instance Monoid RowConstraint where
-  mempty = mempty
+  mempty = RowBottom
 
 instance RowConstraint `Types` Array where
   infer = Row
