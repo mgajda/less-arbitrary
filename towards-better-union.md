@@ -224,6 +224,16 @@ data Example = Example {
 	}
 }
 ```
+```{.haskell file=test/example6.result .hidden}
+newtype Examples = Example (Map String Example)
+
+data Example {
+    size       :: Int
+  , height     :: Int
+  , difficulty :: Double
+  , previous   :: String
+  }
+```
 
 ## What is the goal of inference?
 
@@ -252,10 +262,14 @@ and likelihood of their occurence.
 ### JSON values
 
 Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
-``` {.haskell file=Aeson.hs}
-data Scientific =
-  Scientific { coefficient    :: !Integer
-             , base10Exponent :: Int }
+``` {.haskell file=refs/Data/Aeson.hs}
+data Value =
+    Object (Map String Value)
+  | Array  [Value]
+  | String  Text
+  | Number  Scientific
+  | Bool    Bool
+  | Null
 ```
 
 In order to accomodate both integers
@@ -263,9 +277,9 @@ and exact decimal fractions^[JavaScript and JSON use binary floating point inste
 representation,
 we use decimal floating point[@scientific]:
 
-```{.haskell file=Aeson.hs}
+```{.haskell file=refs/Data/Scientific.hs}
 data Scientific =
-  Scientific { coefficient    :: !Integer
+  Scientific { coefficient    :: Integer
              , base10Exponent :: Int }
 ```
 
@@ -273,24 +287,18 @@ data Scientific =
 
 If inference fails, we can always correct it by adding additional example.
 
-Minimal definition of the type^[We describe laws as QuickCheck[@quickcheck] properties for convenience.]:
+Minimal definition of the typing inference and checking relations^[We describe laws as QuickCheck[@quickcheck] properties for convenience.]:
 
-``` {.haskell #typeclass}
-class Typelike ty
-   => ty `Types` term | ty -> term where
-  infer ::         term -> ty
-  check :: ty   -> term -> Bool
+```{.haskell file=refs/Data/Monoid.hs}
+class Semigroup ty where
+  (<>) :: ty -> ty -> ty
+
+class Semigroup ty
+   => Monoid    ty
+  where
+    mempty :: ty
 ```
 
-Please note that any union type defined in such way
-is a _bounded meet-semilattice_
-(since it always allows union of two different types):
-
-``` {.haskell #typeclass}
-class Monoid   ty
-   => Typelike ty where
-   beyond :: ty -> Bool
-```
 Neutral element of the `Typelike` monoid,
 `mempty` stands for **no information accepted** about possible value
  (no term seen,
@@ -356,23 +364,21 @@ In case of union types, we accept that there
 are many elements in the `beyond` set.
 Key property of the `beyond` set, is that it
 is closed to information acquisition:
-```{.haskell #typelike}
+```{.haskell #typelike-spec}
 class_law_beyond :: Typelike ty => ty -> ty -> Bool
 class_law_beyond ty1 ty2 =
-  beyond ty1 => beyond (ty1 <> ty2)
+  beyond ty1 ==> beyond (ty1 <> ty2)
 ```
 
 It is convenient validation when testing a recursive structure of the type.
 
 ### Typing relation
 
-Alternative way to state properties of considered objects would be
-to define a single class `Typelike`:
 ```{.haskell #typelike}
 class Typelike ty
    => ty `Types` val where
-   infer :: Proxy ty -> val -> ty
-   check ::       ty -> val -> Bool
+   infer ::       val -> ty
+   check :: ty -> val -> Bool
 ```
 
 Here:
@@ -402,7 +408,7 @@ _no more information accepted_.
 
 #### Laws of typelike
 
-```{.haskell #typelike}
+```{.haskell #typelike-spec}
 typelike_laws :: forall    ty.
                 (Typelike  ty
                 ,Arbitrary ty)
@@ -434,7 +440,7 @@ since it only considers semilattice with unification operation.
 When we consider **union Typelike**, we also have
 additional laws:
 
-```{.haskell #typelike}
+```{.haskell #typelike-spec}
 union_types_laws :: forall ty         v.
                           (ty `Types` v
                           ,Arbitrary  v
@@ -460,7 +466,7 @@ and `beyond` for _all values permitted_.
 ## Laws of typing
 It is also important for typing:
 all terms are typed successfully by any value `beyond`.
-```{.haskell #typelike}
+```{.haskell #typelike-spec}
 class_law_beyond :: Types ty term => term -> Property
 class_law_beyond term =
   beyond ty ==> check ty term
@@ -469,19 +475,19 @@ class_law_beyond term =
 For typing we have additional rule:
 type inferred from a term, must always be valid
 for the very same term.
-``` {.haskell #typelike}
+``` {.haskell #typelike-spec}
 class_law_types :: ty `Types` term => term -> Bool
 class_law_types term =
   check (infer term) term
 ```
 
-``` {.haskell #typeclass .hidden}
+```{.haskell #typeclass-spec .hidden}
 class_law_types :: ty `Types` term => Proxy ty -> term -> Bool
 class_law_types p term =
   check_ p (infer_ p term) term
 ```
 
-``` {.haskell .hidden #typeclass}
+``` {.haskell .hidden #typeclass-spec}
 check_ :: ty `Types` term => Proxy ty -> ty -> term -> Bool
 check_ _ = check
 infer_ :: ty `Types` term => Proxy ty ->       term -> ty
@@ -647,18 +653,20 @@ For any `T` value type Set T` satisfies our notion of _free type_.
 ``` { .haskell #freetype }
 data FreeType a = FreeType { captured :: Set a }
                 | Full
-  deriving (Eq)
+  deriving (Eq, Ord, Show)
 
 instance (Ord a, Eq a) => Semigroup (FreeType a) where
   a <> b = FreeType $ (Set.union `on` captured) a b
 instance (Ord a, Eq a) => Monoid (FreeType a) where
   mempty  = FreeType Set.empty
 
-instance (Ord a, Eq a) => Typelike (FreeType a) where
+instance (Ord a, Eq a, Show a)
+      => Typelike (FreeType a) where
   beyond    = (==Full)
 
 instance (Ord      a
-         ,Eq       a)
+         ,Eq       a
+         ,Show     a)
       =>  FreeType a `Types` a where
   infer                    = FreeType . Set.singleton
   check Full         _term = True
@@ -795,7 +803,7 @@ Variant records are a bit more complicated, since it is unclear which typing is 
    "code" : 401}
 ```
 
-```{.haskell file=example_variant1.result}
+```{.haskell file=test/example_variant1.result}
 data OurRecord =
   OurRecord { message :: Maybe String
             , error   :: Maybe String
@@ -804,7 +812,7 @@ data OurRecord =
 ```
 
 Or maybe:
-```{.haskell file=example_variant2.result}
+```{.haskell file=test/example_variant2.result}
 data OurRecord2 = Message { message :: String
                           , uid     :: Int }
                 | Error   { error   :: String
@@ -1465,6 +1473,7 @@ import           Data.Time.Clock(UTCTime(utctDay))
 
 <<typeclass>>
 <<freetype>>
+<<typelike>>
 <<basic-constraints>>
 <<array-constraint>>
 <<object-constraint>>
@@ -1477,7 +1486,13 @@ import           Data.Time.Clock(UTCTime(utctDay))
 ```
 
 ```{.haskell file=test/Spec.hs .hidden}
+{-# language FlexibleInstances     #-}
+{-# language Rank2Types            #-}
+{-# language MultiParamTypeClasses #-}
+{-# language ScopedTypeVariables   #-}
 {-# language StandaloneDeriving     #-}
+{-# language TypeOperators         #-}
+{-# language UndecidableInstances  #-}
 module Main where
 
 import qualified Data.HashMap.Strict as Map
@@ -1491,6 +1506,11 @@ import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Test.QuickCheck.Gen
+import Data.Proxy
+import Test.Hspec
+import Test.Hspec.QuickCheck
+import Test.QuickCheck
+
 import Unions
 
 -- FIXME: use json-autotype's
@@ -1524,23 +1544,7 @@ spec = do
       (class_law_types (Proxy :: Proxy UnionType)
          :: Value -> Bool)
 
-```
-
-```{.haskell file=src/Typelike.hs}
-{-# language FlexibleInstances     #-}
-{-# language Rank2Types            #-}
-{-# language MultiParamTypeClasses #-}
-{-# language ScopedTypeVariables   #-}
-{-# language TypeOperators         #-}
-{-# language UndecidableInstances  #-}
-module Typelike where
-
-import Data.Proxy
-import Test.Hspec
-import Test.Hspec.QuickCheck
-import Test.QuickCheck
-
-<<Typelike>>
+<<typelike-spec>>
 ```
 
 # Appendix: package dependencies {.unnumbered}
