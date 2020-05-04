@@ -56,8 +56,7 @@ documents in documentation.
 
 Past work have suggested it is possible
 to infer decent type mappings
-from sample data [@json-autotype-prezi]
-[@quicktype] [@type-providers-f-sharp].
+from sample data [@json-autotype-prezi; @quicktype; @type-providers-f-sharp].
 
 We expand on these results,
 by presenting the framework
@@ -66,10 +65,9 @@ formulate it mathematically,
 and show its performance on
 JSON API examples.
 
-For a good comparison,
-we show results of
-previously described tools,
-and this more principled approach.
+Our framework enjoy mathematical
+theory, complete typing relation,
+and allows to easily add new features.
 
 ## Related work
 
@@ -245,8 +243,8 @@ is a _bounded meet-semilattice_
 (since it always allows union of two different types):
 
 ``` {.haskell #typeclass}
-class Monoid ty
-   => Typelike where
+class Monoid   ty
+   => Typelike ty where
    beyond :: ty -> Bool
 ```
 Neutral element of the `Typelike` monoid,
@@ -282,7 +280,7 @@ treat `beyond` as a set of error messages,
 since value should have
 a statically assigned and **narrow** type,
 and `mempty` as a fully polymorphic
-type `forall a. a`.
+type `∀a. a`.
 
 Languages with dynamic type discipline will
 treat `beyond` as untyped, dynamic value,
@@ -338,7 +336,7 @@ Here:
 * `<>` is unification: associative, commutative operation
 * `mempty` is neutral element of unification
 * `beyond` set is an attractor of `<>` on both sides
-^[So both `forall any. (<> any)` and `forall any. (any<>)`
+^[So both `∀a. (<> a)` and `∀a.(a<>)`
   are keep result in the `beyond` set.]
 
 In case of union types, where we learn shape of the type
@@ -361,7 +359,7 @@ _no more information accepted_.
 #### Laws of typelike
 
 ```{.haskell #typelike}
-typelike_laws :: forall    ty.
+typelike_laws :: ∀         ty.
                 (Typelike  ty
                 ,Arbitrary ty)
               => Proxy     ty
@@ -393,11 +391,13 @@ When we consider **union Typelike**, we also have
 additional laws:
 
 ```{.haskell #typelike}
-union_types_laws :: forall ty         v.
-                          (ty `Types` v
-                          ,Arbitrary  v
-                          ,Show       v)
-                 => Proxy (ty, v) -> String -> Spec
+union_types_laws :: ∀ ty         v.
+                     (ty `Types` v
+                     ,Arbitrary  v
+                     ,Show       v)
+                 => Proxy (ty,   v)
+                 -> String
+                 -> Spec
 union_types_laws (Proxy :: Proxy (ty, v)) name =
   describe ("union type " <> name) $ do
     prop "mempty never satisfied" $
@@ -426,13 +426,13 @@ For typing we have additional rule:
 type inferred from a term, must always be valid
 for the very same term.
 ``` {.haskell #typelike}
-class_law_types :: Types ty term => term -> Bool
+class_law_types :: ty `Types` term => term -> Bool
 class_law_types term =
   check (infer term) term
 ```
 
 ``` {.haskell #typeclass .hidden}
-class_law_types :: Types ty term => Proxy ty -> term -> Bool
+class_law_types :: ty `Types` term => Proxy ty -> term -> Bool
 class_law_types p term =
   check_ p (infer_ p term) term
 ```
@@ -446,7 +446,7 @@ infer_ _ = infer
 
 Law asserts that the following diagram commutes:
 
-``` { .dot width=45% height=20% #fig:type-commutes }
+```{ .dot width=45% height=20% #fig:type-commutes }
 digraph type {
   node [shape=box,color=white];
   subgraph g {
@@ -477,13 +477,13 @@ data StringConstraint =
   deriving(Eq, Show,Generic)
 
 instance StringConstraint `Types` Text where
-  infer (parseDate  -> Just _) = SCDate
-  infer (parseEmail -> Just _) = SCEmail
+  infer (isValidDate  -> True) = SCDate
+  infer (isValidEmail -> True) = SCEmail
   infer  value                 = SCEnum $
                       Set.singleton value
 
-  check  SCDate     s = isJust $ parseDate s
-  check  SCEmail    s = isJust $ parseEmail s
+  check  SCDate     s = isValidDate  s
+  check  SCEmail    s = isValidEmail s
   check (SCEnum vs) s = s `Set.member` vs
   check  SCNever    _ = False
   check  SCAny      _ = True
@@ -502,7 +502,7 @@ instance Monoid StringConstraint where
   mempty  = SCNever
 
 instance Typelike StringConstraint where
-  beyond  = SCAny
+  beyond  = (==SCAny)
 ```
 
 #### Constraints on number type
@@ -573,6 +573,7 @@ For any `T` value type Set T` satisfies our notion of _free type_.
 ``` { .haskell #freetype }
 data FreeType a = FreeType { captured :: Set a }
                 | Full
+  deriving (Eq)
 
 instance (Ord a, Eq a) => Semigroup (FreeType a) where
   a <> b = FreeType $ (Set.union `on` captured) a b
@@ -637,23 +638,30 @@ After seeing `true` value we also expect
 for a boolean value is its presence or absence.
 
 ``` {.haskell #presence-absence-constraints}
-type BoolConstraint = PresenceConstraint
+type BoolConstraint = PresenceConstraint Bool
+
+type role PresenceConstraint nominal
 
 data PresenceConstraint a =
-    Present -- ^ value seen
+    Present -- ^ some values seen
   | Absent  -- ^ no information
   deriving (Eq,Show,Generic)
 
-instance Semigroup PresenceConstraint where
+instance Semigroup (PresenceConstraint a) where
   Present <> _       = Present
   _       <> Present = Present
-  _       <> _       = Absent
+  Absent  <> Absent  = Absent
 
-instance Monoid PresenceConstraint where
+instance Monoid (PresenceConstraint a) where
   mempty = Absent
 
-instance Typelike PresenceConstraint where
+instance Typelike (PresenceConstraint a) where
   beyond = (==Present)
+
+instance PresenceConstraint a `Types` a where
+  infer _ = Present
+  check Absent  _ = False
+  check Present _ = True
 ```
 Here we have basic presence constraint for any non-Void type:
 (...repetition...)
@@ -671,7 +679,7 @@ The same for `null`, since there is only one
 `null` value.
 
 ``` {.haskell #presence-absence-constraints}
-type NullConstraint = PresenceConstraint
+type NullConstraint = PresenceConstraint ()
 ```
 
 ### Selecting basic priors
@@ -770,10 +778,9 @@ instance Monoid MappingConstraint where
     }
 
 instance Typelike MappingConstraint where
-  beyond = MappingConstraint {
-      keyConstraint   = beyond
-    , valueConstraint = beyond
-    }
+  beyond MappingConstraint {..} =
+       beyond keyConstraint
+    && beyond valueConstraint
 
 instance Semigroup   MappingConstraint where
   a <> b = MappingConstraint {
@@ -782,9 +789,6 @@ instance Semigroup   MappingConstraint where
     , valueConstraint =
         ((<>) `on` valueConstraint) a b
     }
-
-instance Monoid      MappingConstraint where
-  mempty = mempty
 
 instance MappingConstraint `Types`
          Object where
@@ -1020,20 +1024,14 @@ as mostly generic monoid[@generic-monoid]:
 ```{.haskell #type}
 data UnionType =
   UnionType {
-    unionNull :: PresenceConstraint ()
-  , unionBool :: PresenceConstraint Bool
+    unionNull :: NullConstraint
+  , unionBool :: BoolConstraint
   , unionNum  :: NumberConstraint
   , unionStr  :: StringConstraint
   , unionArr  :: ArrayConstraint
   , unionObj  :: ObjectConstraint
   }
   deriving (Eq,Show,Generic)
-
-instance Typelike
-      => Typelike (Maybe a) where
-  mempty = Nothing
-  beyond (Just x) = beyond x
-  beyond  _       = False
 
 instance Semigroup UnionType where
   u1 <> u2 =
@@ -1089,7 +1087,6 @@ dynamic type into different partitions
 of the union^[Impatient reader could ask: what is the _union type_ without _set union_? When the sets are disjoint, we just put the values in different bins for easier handling.]
 
 ``` {.haskell #union-type-instance}
-
 instance UnionType `Types` Value where
   infer (Bool   b) = mempty { unionBool = infer b  }
   infer  Null      = mempty { unionNull = infer () }
@@ -1160,12 +1157,11 @@ for different parts of the term:
 We can add auxiliary information about number of samples seen
 and the constraint will stay `Typelike`:
 
-```{.haskell #counted}
-
+```{.haskell #counted }
 data Counted a =
   Counted { count      :: Int
           , constraint :: a
-          }
+          } deriving (Eq, Show)
 
 instance Semigroup          a
       => Semigroup (Counted a) where
@@ -1175,15 +1171,10 @@ instance Semigroup          a
 instance Monoid  a
       => Monoid (Counted a) where
   mempty = Counted 0 mempty
-```
 
-Here we derive `top` from no observations,
-so this case is special:
-
-```{.haskell #counted}
 instance Typelike          a
       => Typelike (Counted a) where
-  beyond Count {..} = beyond constraint
+  beyond Counted {..} = beyond constraint
 ```
 
 We can connect `Counted` as parametric functor
@@ -1374,6 +1365,7 @@ and design constraints.
 {-# language StandaloneDeriving     #-}
 {-# language TypeApplications       #-}
 {-# language TypeOperators          #-}
+{-# language RoleAnnotations        #-}
 {-# language TypeSynonymInstances   #-}
 {-# language ViewPatterns           #-}
 {-# language RecordWildCards        #-}
@@ -1389,6 +1381,8 @@ import           Data.Function(on)
 import           Data.Proxy
 import           Data.Text(Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding  as Text
+import qualified Text.Email.Validate(isValid)
 import qualified Data.Set  as Set
 import           Data.Set(Set)
 import           Data.Scientific
@@ -1412,44 +1406,16 @@ import           Data.Time.Clock(UTCTime(utctDay))
 <<missing>>
 ```
 
-In order to represent `FreeType` for the `Value`,
-we need to add `Ord` instance for it:
-``` {.haskell .hidden #missing}
-instance Ord       Value where
-  compare = compare `on` encodeConstructors
-
-fromEnum' :: Enum a => a -> Integer
-fromEnum' = fromIntegral . fromEnum
-
-encodeConstructors :: Value -> [Integer]
-encodeConstructors  Null      = [0]
-encodeConstructors (Bool   b) = [1, fromEnum' b]
-encodeConstructors (Number n) = [2,
-        fromIntegral $ base10Exponent n,
-        coefficient n]
-encodeConstructors (String s) = 3:
-  (fromEnum' <$> Text.unpack s)
-encodeConstructors (Array  a) = 4:
-  concatMap encodeConstructors a
-encodeConstructors (Object o) =
-    concatMap encodeItem      $
-    sortBy (compare `on` fst) $
-    Map.toList o
-  where
-    encodeItem (k, v) =
-      (fromEnum' <$> Text.unpack k) <>
-      encodeConstructors v
-```
-
 ```{.haskell #missing}
 
-parseDate :: Text -> Maybe Day
-parseDate = fmap utctDay
-          . parseISO8601
-          . Text.unpack
+isValidDate :: Text -> Bool
+isValidDate = isJust
+            . fmap utctDay
+            . parseISO8601
+            . Text.unpack
 
-parseEmail :: Text -> Bool
-parseEmail = Text.Email.Validate.isValid
+isValidEmail :: Text -> Bool
+isValidEmail = Text.Email.Validate.isValid
            . Text.encodeUtf8
 ```
 
@@ -1460,6 +1426,7 @@ module Main where
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Vector         as Vector
 import qualified Data.Text           as Text
+import qualified Data.Text.Encoding  as Text
 import Data.Scientific
 import Data.Aeson
 import Data.Proxy
@@ -1521,7 +1488,7 @@ import Test.QuickCheck
 
 # Appendix: package dependencies {.unnumbered}
 
-```{.yaml file=}
+```{.yaml file=package.yaml}
 name: union-types
 version: '0.1.0.0'
 category: Web
@@ -1566,3 +1533,34 @@ tests:
 ```
 
 # Appendix: Hindley-Milner as `Typelike` {.unnumbered}
+
+# Appendix: Ord instance for `FreeType`
+
+In order to represent `FreeType` for the `Value`,
+we need to add `Ord` instance for it:
+``` {.haskell .hidden #missing}
+instance Ord       Value where
+  compare = compare `on` encodeConstructors
+
+fromEnum' :: Enum a => a -> Integer
+fromEnum' = fromIntegral . fromEnum
+
+encodeConstructors :: Value -> [Integer]
+encodeConstructors  Null      = [0]
+encodeConstructors (Bool   b) = [1, fromEnum' b]
+encodeConstructors (Number n) = [2,
+        fromIntegral $ base10Exponent n,
+        coefficient n]
+encodeConstructors (String s) = 3:
+  (fromEnum' <$> Text.unpack s)
+encodeConstructors (Array  a) = 4:
+  concatMap encodeConstructors a
+encodeConstructors (Object o) =
+    concatMap encodeItem      $
+    sortBy (compare `on` fst) $
+    Map.toList o
+  where
+    encodeItem (k, v) =
+      (fromEnum' <$> Text.unpack k) <>
+      encodeConstructors v
+```

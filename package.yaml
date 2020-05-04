@@ -1,8 +1,10 @@
+## ------ language="YAML" file="package.yaml" project://towards-better-union.md#1492
+
 name: union-types
 version: '0.1.0.0'
 category: Web
-author: Michal J. Gajda
-maintainer: mjgajda@migamake.com
+author: Anonymous
+maintainer: example@example.com
 license: BSD-3
 extra-source-files:
 - CHANGELOG.md
@@ -28,6 +30,7 @@ dependencies:
 - genvalidity-property
 - iso8601-time
 - time
+- email-validate
 library:
   source-dirs: src
   exposed-modules:
@@ -38,4 +41,4 @@ tests:
     source-dirs: test
     dependencies:
       - union-types
-
+## ------ end
