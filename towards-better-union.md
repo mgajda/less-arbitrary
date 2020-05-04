@@ -128,29 +128,77 @@ exploding to _infamous undefined behaviour_[@undefined1,@undefined2,@undefined3]
 
 Now let's give some motivating examples from realm of JSON API types:
 
-1. Subsets of constructors:
+1. Subsets of data within a single constructor:
   * _API argument is and email_ - this is subset of valid `String` values, that we can usefully validate on the client.
+```{.json file=test/example1a.json .hidden}
+{"message": "Where can I submit my proposal?",
+    "uid" : 1014}
+{"error"  : "Authorization failed",
+   "code" : 401}
+```
+```{.json file=test/example1a.result .hidden}
+newtype Example = Example Email
+```
   * _Page size determines number of results to return (min: 10, max:10000)_ - this is also a subset of `Int` values between `10`, and `10000`
+```{.json file=test/example1b.json .hidden}
+{"example": [
+  10,
+  10000
+]}
+```
+```{.json file=test/example1b.result .hidden}
+newtype Example = Example [Int]
+```
   * _`date` contains ISO8601 date_ -- contains a `String` in format `"2019-03-03"` but not `String` in format `"The third day of the month of March, Anno Domini 2019"`
+```{.json file=test/example1c.json .hidden}
+"2019-03-03"
+```
+```{.json file=test/example1c.result .hidden}
+newtype Example = Example Date
+```
 2. Optional fields:
   * _Page size is 100 by default_ - that is we have `{"page_size": 50}` or `{}`
+```{.json file=test/example2.json .hidden}
+{}
+{"page_size": 50}
+```
+```{.haskell file=test/example2.result .hidden}
+newtype Example = Example { page_size :: Maybe Int }
+```
 3. Variant fields:
   * _Answer to the query is either a number of of registered objects, or String `"unavailable"`_ - this is `Int` value or a `String`
-4. Variant records:
-  * _Answer contains either text message with user id, or an error._ -- That is either:
-```{.json}
-{"message" : "Where can I submit my proposal?", "uid"  : 1014}
-{"error"   : "Authorization failed",            "code" :  401}
+```{.json file=test/example3.json .hidden}
+"alpha"
+10
+```
+```{.haskell file=test/example3.result .hidden}
+newtype Example = Example (String :|: Int)
 ```
 
+4. Variant records:
+  * _Answer contains either text message with user id, or an error._ -- That is either:
+```{.json file=test/example4.json}
+{"message" : "Where can I submit my proposal?", "uid"  : 1014}
+{"message" : "Submit it to HotCRP",             "uid"  :  317}
+{"error"   : "Authorization failed",            "code" :  401}
+{"error"   : "User not found",                  "code" :  404}
+```
 5. Arrays in place of records^[Which strikes author as a bad practice, but it is part of real-life APIs. We might want to make it optional with `--array-records` option.]:
-``` {.json file=example5.json}
-
+``` {.json file=test/example5.json}
 [
   [1, "Nick",    null       ]
 , [2, "George", "2019-04-11"]
 , [3, "Olivia", "1984-05-03"]
 ]
+```
+```{.haskell file=test/example5.result .hidden}
+data Examples = Examples [Example]
+
+data Example = Example {
+    field1 :: Int
+  , field2 :: String
+  , field3 :: Maybe Date
+  }
 ```
 
 6. Maps of identical objects^[Example taken from @quicktype.]:
@@ -205,13 +253,9 @@ and likelihood of their occurence.
 
 Since we are interested in JSON, we use Haskell encoding of JSON term for convenient reading^[As used by Aeson[@aeson] package.]:
 ``` {.haskell file=Aeson.hs}
-data Value =
-    Object (Map String Value)
-  | Array  [Value]
-  | String  Text
-  | Number  Scientific
-  | Bool    Bool
-  | Null
+data Scientific =
+  Scientific { coefficient    :: !Integer
+             , base10Exponent :: Int }
 ```
 
 In order to accomodate both integers
@@ -458,6 +502,36 @@ digraph type {
   Value -> Bool [label="const True"];
 }
 ```
+
+## Type engineering principles
+
+Given that we want to infer the type from finite number of samples
+we are presented with _learning problem_,
+so we need to use _prior_ knowledge of the domain
+to generalize when inferring types.
+
+Clearly after seeing `a: false` we can expect that it is sometimes `a: true`.
+After seeing `b: 123` we expect that `b: 100` would also be acceptable.
+That means that we need our typing to _learn a reasonable general class from few instances._
+That defines making a practical type system as inference problem.
+
+Since our goal is to deliver most descriptive^[Shortest, by information complexity principle.]
+types, we will assume that we need to abstract a bit from the _free type_ and take on larger
+sets whenever it seems justified.
+
+Another principle is that of **correct operation**,
+where given operations on types, we try to find a minimal types
+that assure correct operation unexpected errors.
+
+Indeed we want to use this theory to infer a type definition from a finite set of examples,
+but we also want it to generalize to infinite types.
+
+Aiming for this, we set the rules of type design:
+
+* type should have a finite description
+* inference must be contravariant functor with regards to constructors, for `{"a": X, "b": Y}` is types
+  by `T x y`,
+  then `X :: x` and `Y :: y` must be also a valid typing.
 
 #### Simple type constraints
 
@@ -714,14 +788,14 @@ In other words for `Int :|: String` type we first check if the value is `String`
 
 Variant records are a bit more complicated, since it is unclear which typing is better:
 
-```{.json .javascript file=test/example1a.json}
+```{.json .javascript file=test/example_variant1.json}
 {"message": "Where can I submit my proposal?",
     "uid" : 1014}
 {"error"  : "Authorization failed",
    "code" : 401}
 ```
 
-```haskell
+```{.haskell file=example_variant1.result}
 data OurRecord =
   OurRecord { message :: Maybe String
             , error   :: Maybe String
@@ -730,7 +804,7 @@ data OurRecord =
 ```
 
 Or maybe:
-```haskell
+```{.haskell file=example_variant2.result}
 data OurRecord2 = Message { message :: String
                           , uid     :: Int }
                 | Error   { error   :: String
@@ -743,7 +817,7 @@ are matching. And then compare it to type complexity (with optionalities being m
 In this case latter definition has only one choice (optionality), but we only have two samples to begin with.
 
 With more samples, the pattern emerges:
-```{.json file=test/example1b.json}
+```{.json file=test/example_variant2.json}
 {"error"  : "Authorization failed",
     "code":  401}
 {"message": "Where can I submit my proposal?",
@@ -1279,35 +1353,31 @@ that environment of typelikes is also `Typelike`,
 and constraint unification can be  extended the same
 way.
 
-## Type system engineering principles
+## Generic derivation of Typelike
 
-Given that we want to infer the type from finite number of samples
-we are presented with _learning problem_,
-so we need to use _prior_ knowledge of the domain
-to generalize when inferring types.
+Note that `Typelike` instances for non-simple types
+usually follow one of two patterns:
+1. For typing terms that have a finite sum
+  of disjoint constructors,
+  we bin this information by constructor
+  during `infer`ence
+2. for typing terms that have two alternative
+  representations we apply
+  we `infer` all constraints separately,
+  by applying `infer`ence to the same term
 
-Clearly after seeing `a: false` we can expect that it is sometimes `a: true`.
-After seeing `b: 123` we expect that `b: 100` would also be acceptable.
-That means that we need our typing to _learn a reasonable general class from few instances._
-That defines making a practical type system as inference problem.
+In both cases derivation of `Monoid`,
+and `Typelike` instances is the same.
 
-Since our goal is to deliver most descriptive^[Shortest, by information complexity principle.]
-types, we will assume that we need to abstract a bit from the _free type_ and take on larger
-sets whenever it seems justified.
+That allows us to use GHC `Generic`s[@generics]
+to define standard implementations
+for most of the boilerplate code!
 
-Another principle is that of **correct operation**,
-where given operations on types, we try to find a minimal types
-that assure correct operation unexpected errors.
-
-Indeed we want to use this theory to infer a type definition from a finite set of examples,
-but we also want it to generalize to infinite types.
-
-Aiming for this, we set the rules of type design:
-
-* type should have a finite description
-* inference must be contravariant functor with regards to constructors, for `{"a": X, "b": Y}` is types
-  by `T x y`,
-  then `X :: x` and `Y :: y` must be also a valid typing.
+That means that we only will have to manulally define:
+* new constraint types,
+* inference from constructors (case 1)
+and entirety of handling alternative constraints
+is implemented, until we choose representations.
 
 ## Conclusion
 
@@ -1404,19 +1474,6 @@ import           Data.Time.Clock(UTCTime(utctDay))
 <<counted>>
 
 <<missing>>
-```
-
-```{.haskell #missing}
-
-isValidDate :: Text -> Bool
-isValidDate = isJust
-            . fmap utctDay
-            . parseISO8601
-            . Text.unpack
-
-isValidEmail :: Text -> Bool
-isValidEmail = Text.Email.Validate.isValid
-           . Text.encodeUtf8
 ```
 
 ```{.haskell file=test/Spec.hs .hidden}
@@ -1534,11 +1591,10 @@ tests:
 
 # Appendix: Hindley-Milner as `Typelike` {.unnumbered}
 
-# Appendix: Ord instance for `FreeType`
-
-In order to represent `FreeType` for the `Value`,
-we need to add `Ord` instance for it:
-``` {.haskell .hidden #missing}
+# Appendix: Missing pieces of code {.unnumbered}
+``` {.haskell #missing .hidden}
+-- In order to represent `FreeType` for the `Value`,
+-- we need to add `Ord` instance for it:
 instance Ord       Value where
   compare = compare `on` encodeConstructors
 
@@ -1563,4 +1619,17 @@ encodeConstructors (Object o) =
     encodeItem (k, v) =
       (fromEnum' <$> Text.unpack k) <>
       encodeConstructors v
+```
+
+```{.haskell #missing}
+
+isValidDate :: Text -> Bool
+isValidDate = isJust
+            . fmap utctDay
+            . parseISO8601
+            . Text.unpack
+
+isValidEmail :: Text -> Bool
+isValidEmail = Text.Email.Validate.isValid
+           . Text.encodeUtf8
 ```

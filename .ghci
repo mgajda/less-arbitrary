@@ -1,0 +1,4 @@
+:set -XOverloadedStrings
+:set -XPartialTypeSignatures
+:set -package=union-types
+import Data.Aeson
