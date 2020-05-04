@@ -79,7 +79,7 @@ _ad-hoc_[@type-providers-f-sharp].
 
 There was a previous effort to apply union types
 to JSON inference to generate Haskell
-types[@json-autotype-presi],
+types[@json-autotype-prezi],
 but it also lacks a rigorous formal treatment.
 
 Another attempt to automatically infer schemas
@@ -119,7 +119,7 @@ Now let's give some motivating examples from realm of JSON API types:
 {"error"   : "Authorization failed",            "code" :  401}
 ```
 
-5. Arrays in place of records^[Which strikes author as a bad practice, but we want to handle it nevertheless. Possible with `--bad-array-records` option.]:
+5. Arrays in place of records^[Which strikes author as a bad practice, but it is part of real-life APIs. We might want to make it optional with `--array-records` option.]:
 ``` {.json file=example5.json}
 
 [
@@ -153,7 +153,7 @@ Now let's give some motivating examples from realm of JSON API types:
 }
 ```
 
-## What is the point of inference?
+## What is the goal of inference?
 
 Given another undocumented (or wrongly labelled) JSON API, we want to read the input
 into Haskell, and avoid checking for _unexpected_ deviations of the format.
@@ -208,8 +208,7 @@ If inference fails, we can always correct it by adding additional example.
 Minimal definition of the type^[We describe laws as QuickCheck[@quickcheck] properties for convenience.]:
 
 ``` {.haskell #typeclass}
-class (Monoid      ty
-      ,Semilattice ty)
+class Typelike ty
    => ty `Types` term | ty -> term where
   infer ::         term -> ty
   check :: ty   -> term -> Bool
@@ -221,39 +220,55 @@ is a _bounded meet-semilattice_
 
 ``` {.haskell #typeclass}
 class Monoid ty
-   => Semilattice ty where
-   bottom, top :: ty
-   bottom = mempty
+   => Typelike where
+   beyond :: ty -> Bool
 ```
-Here `bottom` stands for **no information** about possible value
- (empty term,
-  without even a `null`).
+Neutral element of the `Typelike` monoid,
+`mempty` stands for **no information accepted** about possible value
+ (no term seen,
+  not even a `null`).
   For example an empty array `[]` could be typed
-  as a array type with `bottom` element type.
+  as a array type with `mempty` as element type.
 
-Naturally `top` represent **everything permitted**
+In the domain of permissive union types,
+`beyond` represents **everything permitted**
 or fully dynamic value, when we gathered
 information that places any possible value inside the type.
+At first reading one may be tempted to claim
+that `beyond` set should consists of only the `beyond`
+element.
+However, since we defined **unification**
+operator `<>`, as **information fusion**,
+we might have difficulty in assuring
+that no information is lost during our unification.
+
+Also strict type systems tend to have more than
+one error value -- since it has to keep the
+error message, and track of where the error
+originated^[In this case: `beyond (Error _) = True | otherwise = False`.].
 
 This firmly places type inference as a **learning problem**,
 and allows us to find the common ground
 between dynamic and static typing disciplines.
 
 Languages with static type discipline usually
-treat `top` as an error, since value should have
-a statically assigned type, and `bottom`
-as a fully polymorphic type `forall a. a`.
+treat `beyond` as a set of error messages,
+since value should have
+a statically assigned and **narrow** type,
+and `mempty` as a fully polymorphic
+type `forall a. a`.
 
 Languages with dynamic type discipline will
-treat `top` as untyped, dynamic value,
-and `bottom` again as an unknown polymorphic value.
+treat `beyond` as untyped, dynamic value,
+and `mempty` again as an unknown polymorphic
+value^[May sound similar until we consider adding
+more information to the type.].
 
 Note that `Monoid` operation is a union type unification.
 
-Beside standard laws for bounded meet semilattice
-with `top` as greatest element,
-and monoid with a neutral element of `bottom`,
-we have a law specific to types.
+Beside standard laws for monoid
+with `beyond` set closed to information addition
+by `(<>a)` or `(a<>)` for any value of `a`.
 
 Since we state it as **information acquisition**,
 we will use a better interface:
@@ -265,9 +280,9 @@ class (Monoid   t
    beyond :: t -> Bool
 ```
 
-That is because we want more than a single `top`
+That is because we want more than a single `beyond`
 element. When typing Haskell, we would
-like `top` to contain error message,
+like `beyond` to contain error message,
 which makes many.
 In case of union types, we accept that there
 are many elements in the `beyond` set.
@@ -279,6 +294,100 @@ class_law_beyond ty1 ty2 =
   beyond ty1 => beyond (ty1 <> ty2)
 ```
 
+It is convenient validation when testing a recursive structure of the type.
+
+### Typing relation
+
+Alternative way to state properties of considered objects would be
+to define a single class `Typelike`:
+```{.haskell #typelike}
+class Typelike ty
+   => ty `Types` val where
+   infer :: Proxy ty -> val -> ty
+   check ::       ty -> val -> Bool
+```
+
+Here:
+
+* `<>` is unification: associative, commutative operation
+* `mempty` is neutral element of unification
+* `beyond` set is an attractor of `<>` on both sides
+^[So both `forall any. (<> any)` and `forall any. (any<>)`
+  are keep result in the `beyond` set.]
+
+In case of union types, where we learn shape of the type
+from examples, we can say that:
+
+* `mempty` represents _no information received_
+* `beyond` represents sets of typelikes where
+   _no more information will change anything_
+or _no more information is accepted_
+(for the purpose of typing; the extra
+ information may be still useful in error messages)
+* `<>` represents fusing information
+  on the same entity
+  from different observations
+
+We call neutral element to be _no information given_
+or _no observation_, and maximum to be
+_no more information accepted_.
+
+#### Laws of typelike
+
+```{.haskell #typelike}
+typelike_laws :: forall    ty.
+                (Typelike  ty
+                ,Arbitrary ty)
+              => Proxy     ty
+              -> String -> Spec
+typelike_laws (Proxy :: Proxy ty) name =
+  describe ("Typelike " <> name) $ do
+    describe "mempty is neutral element" $ do
+      prop "left"  $ \t -> mempty <> t      == (t   :: ty)
+      prop "right" $ \t -> t      <> mempty == (t   :: ty)
+    describe "beyond is absorbing element" $ do
+      prop "left"  $ \t -> beyond    <> t      == (beyond :: ty)
+      prop "right" $ \t -> t      <> beyond    == (beyond :: ty)
+    prop "commutative" $ \t u -> t <> u == u <> (t  :: ty)
+    prop "associative" $ \t u v ->  t <> (u  <>  v)
+                                == (t <>  u) <> (v  :: ty)
+```
+
+This is important, since we may
+want to separate concerns about
+valid domain of types/type constraints
+versus concerns of the typing of the terms
+by these valid types.
+
+Note that this approach is a bit more relaxed than
+full lattice subtyping[@subtype-inequalities][@subtyping-lattice],
+since it only considers semilattice with unification operation.
+
+When we consider **union Typelike**, we also have
+additional laws:
+
+```{.haskell #typelike}
+union_types_laws :: forall ty         v.
+                          (ty `Types` v
+                          ,Arbitrary  v
+                          ,Show       v)
+                 => Proxy (ty, v) -> String -> Spec
+union_types_laws (Proxy :: Proxy (ty, v)) name =
+  describe ("union type " <> name) $ do
+    prop "mempty never satisfied" $
+      ((not . check (mempty :: ty)) :: v -> Bool)
+    prop "beyond always satisfied" $
+      ((check (beyond :: ty)) :: v -> Bool)
+```
+
+This is design choice that does not apply when
+using Typelike to represent static type discipline.
+
+Minimal `Typelike` instance would be one
+that contains only `mempty` for _no sample data received_,
+and `beyond` for _all values permitted_.
+
+## Laws of typing
 It is also important for typing:
 all terms are typed successfully by any value `beyond`.
 ```{.haskell #typelike}
@@ -324,95 +433,6 @@ digraph type {
 }
 ```
 
-And laws
-It is convenient validation when testing a recursive structure of the type.
-
-### Typing relation
-
-Alternative way to state properties of considered objects would be
-to define a single class `Typelike`:
-```{.haskell #typelike}
-class Typelike ty
-   => ty `Types` val where
-   infer :: Proxy ty -> val -> ty
-   check ::       ty -> val -> Bool
-
-typelike_laws :: forall    ty.
-                (Typelike  ty
-                ,Arbitrary ty)
-              => Proxy     ty
-              -> String -> Spec
-typelike_laws (Proxy :: Proxy ty) name =
-  describe ("Typelike " <> name) $ do
-    describe "bottom is neutral element" $ do
-      prop "left"  $ \t -> bottom <> t      == (t   :: ty)
-      prop "right" $ \t -> t      <> bottom == (t   :: ty)
-    describe "top is absorbing element" $ do
-      prop "left"  $ \t -> top    <> t      == (top :: ty)
-      prop "right" $ \t -> t      <> top    == (top :: ty)
-    prop "commutative" $ \t u -> t <> u == u <> (t  :: ty)
-    prop "associative" $ \t u v ->  t <> (u  <>  v)
-                                == (t <>  u) <> (v  :: ty)
-```
-
-Here:
-
-* unification is an associative, commutative operation
-* bottom is neutral element of unification
-* `top` is absorbing element
-
-In case of union types, where we learn shape of the type
-from examples, we can say that:
-
-* `bottom` represents _no information received_
-* `top` represents _no more information will change anything_
-or _no more information accepted_
-* `unify` represents fusing information
-  on the same entity
-  from different observations
-
-So `Typelike` is bounded join-semilattice,
-assuring existence of neutral element
-of the join operation.
-
-We call neutral element to be _no information given_
-or _no observation_, and maximum to be
-_no more information accepted_.
-
-This is important, since we may
-want to separate concerns about
-valid domain of types/type constraints
-versus concerns of the typing of the terms
-by these valid types.
-
-Note that this approach is a bit more relaxed than
-full lattice subtyping[@subtype-inequalities][@subtyping-lattice],
-since it only considers semilattice with unification operation.
-
-When we consider **union Typelike**, we also have
-additional laws:
-
-```{.haskell #typelike}
-union_types_laws :: forall ty         v.
-                          (ty `Types` v
-                          ,Arbitrary  v
-                          ,Show       v)
-                 => Proxy (ty, v) -> String -> Spec
-union_types_laws (Proxy :: Proxy (ty, v)) name =
-  describe ("union type " <> name) $ do
-    prop "bottom never satisfied" $
-      ((not . check (bottom :: ty)) :: v -> Bool)
-    prop "top always satisfied" $
-      ((check (top :: ty)) :: v -> Bool)
-```
-
-This is design choice that does not apply when
-using Typelike to represent static type discipline.
-
-Minimal `Typelike` instance would be one
-that contains only `bottom` for _no sample data received_,
-and `top` for _all values permitted_.
-
 #### Simple type constraints
 
 1. Given a sample of values, we can have a reasonable approximation of expected values:
@@ -453,13 +473,13 @@ instance Monoid StringConstraint where
   mempty  = SCNever
 
 instance Semilattice StringConstraint where
-  bottom = SCNever
-  top    = SCAny
+  mempty = SCNever
+  beyond    = SCAny
 ```
 
 #### Constraints on number type
 
-2. Analogically we may infer for integer constraints^[Program makes it optional `--infer-int-ranges`.] as:
+Analogically we may infer for integer constraints^[Program makes it optional `--infer-int-ranges`.] as:
 ```{.haskell #basic-constraints}
 data IntConstraint = IntRange Int Int
                    | IntNever
@@ -474,11 +494,11 @@ instance Semigroup IntConstraint where
                   IntRange (min a c) (max b d)
 
 instance Semilattice IntConstraint where
-  bottom = IntNever
-  top    = IntAny
+  mempty = IntNever
+  beyond    = IntAny
 
 instance Monoid IntConstraint where
-  mempty = bottom
+  mempty = mempty
 ```
 
 JavaScript has one number type that holds both `Float` and `Int`, so JSON inherits that:
@@ -490,8 +510,8 @@ data NumberConstraint =
   deriving(Eq,Show,Generic)
 
 instance Semilattice NumberConstraint where
-  bottom = NCNever
-  top    = NCFloat
+  mempty = NCNever
+  beyond    = NCFloat
 
 instance Semigroup NumberConstraint where
   <<standard-rules-number-constraint>>
@@ -517,7 +537,7 @@ _       <> NCNever = NCNever
 
 ```{.haskell .hidden #standard-instances-number-constraint}
 instance Monoid NumberConstraint where
-  mempty = bottom
+  mempty = mempty
 ```
 
 ## Free union type
@@ -529,13 +549,13 @@ data FreeType a = FreeType { captured :: Set a }
                 | Full
 
 instance (Ord a, Eq a) => Semigroup (FreeType a) where
-  a <> b = FreeType $ (Set.union `on` captured) a b -- mappend
+  a <> b = FreeType $ (Set.union `on` captured) a b
 instance (Ord a, Eq a) => Monoid (FreeType a) where
   mempty  = FreeType Set.empty
 
 instance (Ord a, Eq a) => Semilattice (FreeType a) where
-  bottom = mempty
-  top    = Full
+  mempty = mempty
+  beyond    = Full
 
 instance (Ord      a
          ,Eq       a)
@@ -564,8 +584,8 @@ data PresenceConstraint a =
   deriving (Eq, Show)
 
 instance Typelike (PresenceConstraint a) where
-  bottom = Absent
-  top    = Present
+  mempty = Absent
+  beyond    = Present
 
 instance Monoid (PresenceConstraint a) where
   Absent  <> a       = a
@@ -608,8 +628,8 @@ instance Monoid PresenceConstraint where
   mempty = Absent
 
 instance Semilattice PresenceConstraint where
-  top    = Present
-  bottom = Absent
+  beyond    = Present
+  mempty = Absent
 ```
 Here we have basic presence constraint for any non-Void type:
 (...repetition...)
@@ -640,8 +660,8 @@ We generalize basic datatypes.
 
 Note that we treat `null` as separate basic types,
 that can form union with any other.
-Thus `bottom` indicates _no type and no value_.
-The `top` of our semilattice is the type of any `Value` term.
+Thus `mempty` indicates _no type and no value_.
+The `beyond` of our semilattice is the type of any `Value` term.
 
 #### Variants
 
@@ -720,13 +740,13 @@ data MappingConstraint =
     } deriving (Eq, Show, Generic)
 
 instance Semilattice MappingConstraint where
-  bottom = MappingConstraint {
-      keyConstraint   = bottom
-    , valueConstraint = bottom
+  mempty = MappingConstraint {
+      keyConstraint   = mempty
+    , valueConstraint = mempty
     }
-  top = MappingConstraint {
-      keyConstraint   = top
-    , valueConstraint = top
+  beyond = MappingConstraint {
+      keyConstraint   = beyond
+    , valueConstraint = beyond
     }
 
 instance Semigroup   MappingConstraint where
@@ -738,7 +758,7 @@ instance Semigroup   MappingConstraint where
     }
 
 instance Monoid      MappingConstraint where
-  mempty = bottom
+  mempty = mempty
 
 instance MappingConstraint `Types`
          Object where
@@ -765,8 +785,8 @@ data RecordConstraint =
       } deriving (Show,Eq,Generic)
 
 instance Semilattice RecordConstraint where
-  bottom = RCBottom
-  top    = RCTop
+  mempty = RCBottom
+  beyond    = RCTop
 
 instance Semigroup   RecordConstraint where
   RCBottom <> a        = a
@@ -778,7 +798,7 @@ instance Semigroup   RecordConstraint where
                        (fields b)
 
 instance Monoid      RecordConstraint where
-  mempty = bottom
+  mempty = mempty
 
 instance RecordConstraint `Types` Object
   where
@@ -821,16 +841,16 @@ instance Semigroup ObjectConstraint where
     }
 
 instance Monoid ObjectConstraint where
-  mempty = bottom
+  mempty = mempty
 
 instance Semilattice ObjectConstraint where
-  bottom = ObjectConstraint {
-             mappingCase = bottom
-           , recordCase  = bottom
+  mempty = ObjectConstraint {
+             mappingCase = mempty
+           , recordCase  = mempty
            }
-  top    = ObjectConstraint {
-             mappingCase = top
-           , recordCase  = top
+  beyond    = ObjectConstraint {
+             mappingCase = beyond
+           , recordCase  = beyond
            }
 
 instance ObjectConstraint `Types` Object where
@@ -880,13 +900,13 @@ data ArrayConstraint  = ArrayConstraint {
   deriving (Show, Eq, Generic)
 
 instance Semilattice ArrayConstraint where
-  bottom = ArrayConstraint {
-             arrayCase = bottom
-           , rowCase   = bottom
+  mempty = ArrayConstraint {
+             arrayCase = mempty
+           , rowCase   = mempty
            }
-  top = ArrayConstraint {
-          arrayCase = top
-        , rowCase   = top
+  beyond = ArrayConstraint {
+          arrayCase = beyond
+        , rowCase   = beyond
         }
 
 instance Semigroup ArrayConstraint where
@@ -897,7 +917,7 @@ instance Semigroup ArrayConstraint where
     }
 
 instance Monoid ArrayConstraint where
-  mempty = bottom
+  mempty = mempty
 
 <<row-constraint>>
 
@@ -919,7 +939,7 @@ instance ArrayConstraint `Types` Array
 
 Row constraint is valid only if
 there is a fixed number of entries in each
-row, which we represent by escaping to the `top`
+row, which we represent by escaping to the `beyond`
 whenever there is uneven number of columns.
 
 ``` {.haskell #row-constraint}
@@ -930,11 +950,11 @@ data RowConstraint =
    deriving (Eq,Show,Generic)
 
 instance Semilattice RowConstraint where
-  bottom = RowBottom
-  top    = RowTop
+  mempty = RowBottom
+  beyond = (==RowTop)
 
 instance Monoid RowConstraint where
-  mempty = bottom
+  mempty = mempty
 
 instance RowConstraint `Types` Array where
   infer = Row
@@ -975,7 +995,7 @@ we make it a record for easier processing:
 
 Note that given constraints for different type
 constructors, union type can be though of
-as mostly generic[@generic-monoid]^[Which likely makes it easily expressible with HKDT[@hkdt-blog][@hkdt-barbies].]:
+as mostly generic monoid[@generic-monoid]:
 
 ```{.haskell #type}
 data UnionType =
@@ -989,10 +1009,11 @@ data UnionType =
   }
   deriving (Eq,Show,Generic)
 
-instance Semilattice  a
-      => Semilattice (Maybe a) where
-  bottom = Nothing
-  top    = Just top
+instance Typelike
+      => Typelike (Maybe a) where
+  mempty = Nothing
+  beyond (Just x) = beyond x
+  beyond  _       = False
 
 instance Semigroup UnionType where
   u1 <> u2 =
@@ -1012,43 +1033,50 @@ That means that we compute the meet over different dimensions.
 
 ```{.haskell #type}
 instance Monoid UnionType where
-  mempty = bottom
-
-instance Semilattice UnionType where
-  bottom = UnionType {
-      unionNull = bottom
-    , unionBool = bottom
-    , unionNum  = bottom
-    , unionStr  = bottom
-    , unionObj  = bottom
-    , unionArr  = bottom
-    }
-  top = UnionType {
-      unionNull = top
-    , unionBool = top
-    , unionNum  = top
-    , unionStr  = top
-    , unionObj  = top
-    , unionArr  = top
+  mempty = UnionType {
+      unionNull = mempty
+    , unionBool = mempty
+    , unionNum  = mempty
+    , unionStr  = mempty
+    , unionObj  = mempty
+    , unionArr  = mempty
     }
 ```
 
-Inference uses _mutual exclusivity_ of the
-cases, depending on the kind of value.
+Since we described `beyond` set that is
+either **accepting any value**,
+and **accepting no more information**,
+its definition should be no surprise:
+
+```{.haskell #type}
+instance Typelike UnionType where
+  beyond UnionType {..} =
+      beyond unionNull
+   && beyond unionBool
+   && beyond unionNum
+   && beyond unionStr
+   && beyond unionObj
+   && beyond unionArr
+```
+
+Inference breaks disjoint alternatives
+to different record fields,
+depending on the constructor of given value.
+
 This allows as for clear and efficient
 treatment of values distinguished by different
 dynamic type into different partitions
-of the union:
+of the union^[Impatient reader could ask: what is the _union type_ without _set union_? When the sets are disjoint, we just put the values in different bins for easier handling.]
 
 ``` {.haskell #union-type-instance}
 
 instance UnionType `Types` Value where
-  infer (Bool   b) = bottom { unionBool = infer b  }
-  infer  Null      = bottom { unionNull = infer () }
-  infer (Number n) = bottom { unionNum  = infer n  }
-  infer (String s) = bottom { unionStr  = infer s  }
-  infer (Object o) = bottom { unionObj  = infer o  }
-  infer (Array  a) = bottom { unionArr  = infer a  }
+  infer (Bool   b) = mempty { unionBool = infer b  }
+  infer  Null      = mempty { unionNull = infer () }
+  infer (Number n) = mempty { unionNum  = infer n  }
+  infer (String s) = mempty { unionStr  = infer s  }
+  infer (Object o) = mempty { unionObj  = infer o  }
+  infer (Array  a) = mempty { unionArr  = infer a  }
   check UnionType { unionNum } (Number n) =
               check unionNum           n
   check UnionType { unionStr } (String s) =
@@ -1058,6 +1086,7 @@ instance UnionType `Types` Value where
   check UnionType { unionArr } (Array  a) =
               check unionArr           a
 ```
+
 ### Overlapping alternatives
 
 Crux of union type systems have been long
@@ -1110,6 +1139,7 @@ for different parts of the term:
 ```
 We can add auxiliary information about number of samples seen
 and the constraint will stay `Typelike`:
+
 ```{.haskell #counted}
 
 data Counted a =
@@ -1129,10 +1159,11 @@ instance Monoid  a
 
 Here we derive `top` from no observations,
 so this case is special:
-```{.haskell #counted
+
+```{.haskell #counted}
 instance Typelike          a
       => Typelike (Counted a) where
-  top = Counted 0 top
+  beyond Count {..} = beyond constraint
 ```
 
 We can connect `Counted` as parametric functor
@@ -1147,7 +1178,6 @@ In order to preserve efficiency, we might want to merge whenever, number of alte
 And only attempt to narrow strings when cardinality crosses the threshold ^[Option `--min-enumeration-cardinality`.]
 
 # Choosing representation
-
 
 ## Heuristics for better types
 
@@ -1166,8 +1196,8 @@ If we have no observations of array type,
 it can be inconvenient to disallow array to
 contain any value at all.
 Thus we make a non-monotonic step of
-converting final `bottom` to `top`,
-and allowing any `Value` there on the input.
+converting final `mempty` to representation
+allowing any `Value` there on the input.
 
 That is because, our program must not have any assumptions
 about these values, but at the same it should be able to
@@ -1175,27 +1205,35 @@ output them for debugging purposes.
 
 ## Overall processing scheme
 
-```{ .dot width=33% height=14% #fig:dataflow }
+```{ .dot width=48% height=13% #fig:dataflow }
 digraph {
   margin=0;
+  pad=0;
+  node [margin="0.05,0",pad="0,0"];
+  //bgcolor=gray;
   node [shape=box,color=white];
   rankdir=LR;
   subgraph g1 {
-    "JSON Value";
-    "Free type";
+    "JSON Value" [label="JSON\nvalue"];
+    "Typelike" [label="Infer"];
     rank=same;
   }
   subgraph g2 {
-    "Local generalization";
-    "Match similar";
+    "Choose representation" [label="Choose\nrepresentation"];
+    "Match similar" [label="Unify\nsimilar"];
     rank=same;
   }
   subgraph g3 {
-    "Unify similar";
-    "Produce type" [label="Produce type mapping"];
+    "Breakdown" [label="Break\ndown\ninto\ndeclarations"]
+    "Haskell code" [label="Haskell\ncode"];
     rank=same;
   }
-  "JSON Value" -> "Free type" -> "Local generalization" -> "Match similar" -> "Unify similar" -> "Produce type" -> "Haskell code";
+  "JSON Value" -> "Typelike" -> "Match similar"
+               -> "Choose representation"
+               -> "Breakdown"
+               -> "Haskell code";
+  "JSON Value" -> "Choose representation" [style=invis];
+  "Haskell code" -> "Match similar" [style=invis];
 }
 ```
 
@@ -1288,13 +1326,18 @@ system engineering_ will be more ubiquitous
 in practice, replacing _ad-hoc_ approaches
 in the future.
 
+This paves the way towards formal
+construction and derivation of type systems
+from specification of value domains
+and design constraints.
+
 # Bibliography
 
 ::::: {#refs}
 
 :::::
 
-# Appendix
+# Appendix: module headers
 
 ```{.haskell file=src/Unions.hs .hidden}
 {-# language AllowAmbiguousTypes    #-}
@@ -1433,8 +1476,6 @@ spec = do
 
 ```
 
-# Appendix: generic Typelike
-
 ```{.haskell file=src/Typelike.hs}
 {-# language FlexibleInstances     #-}
 {-# language Rank2Types            #-}
@@ -1451,3 +1492,50 @@ import Test.QuickCheck
 
 <<Typelike>>
 ```
+
+# Appendix: package dependencies
+
+```{.yaml file=}
+name: union-types
+version: '0.1.0.0'
+category: Web
+author: Anonymous
+maintainer: example@example.com
+license: BSD-3
+extra-source-files:
+- CHANGELOG.md
+- README.md
+dependencies:
+- base
+- aeson
+- containers
+- text
+- hspec
+- QuickCheck
+- unordered-containers
+- scientific
+- hspec
+- QuickCheck
+- validity
+- vector
+- unordered-containers
+- scientific
+- validity
+- genvalidity
+- genvalidity-hspec
+- genvalidity-property
+- iso8601-time
+- time
+library:
+  source-dirs: src
+  exposed-modules:
+  - Unions
+tests:
+  spec:
+    main: Spec.hs
+    source-dirs: test
+    dependencies:
+      - union-types
+```
+
+# Appendix: Hindley-Milner as `Typelike`
