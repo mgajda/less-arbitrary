@@ -280,7 +280,7 @@ treat `beyond` as a set of error messages,
 since value should have
 a statically assigned and **narrow** type,
 and `mempty` as a fully polymorphic
-type `∀a. a`.
+type `forall a. a`.
 
 Languages with dynamic type discipline will
 treat `beyond` as untyped, dynamic value,
@@ -336,7 +336,7 @@ Here:
 * `<>` is unification: associative, commutative operation
 * `mempty` is neutral element of unification
 * `beyond` set is an attractor of `<>` on both sides
-^[So both `∀a. (<> a)` and `∀a.(a<>)`
+^[So both `forall a. (<> a)` and ∀`a.(a<>)`
   are keep result in the `beyond` set.]
 
 In case of union types, where we learn shape of the type
@@ -359,7 +359,7 @@ _no more information accepted_.
 #### Laws of typelike
 
 ```{.haskell #typelike}
-typelike_laws :: ∀         ty.
+typelike_laws :: forall    ty.
                 (Typelike  ty
                 ,Arbitrary ty)
               => Proxy     ty
@@ -391,11 +391,11 @@ When we consider **union Typelike**, we also have
 additional laws:
 
 ```{.haskell #typelike}
-union_types_laws :: ∀ ty         v.
-                     (ty `Types` v
-                     ,Arbitrary  v
-                     ,Show       v)
-                 => Proxy (ty,   v)
+union_types_laws :: forall ty         v.
+                          (ty `Types` v
+                          ,Arbitrary  v
+                          ,Show       v)
+                 => Proxy (ty,        v)
                  -> String
                  -> Spec
 union_types_laws (Proxy :: Proxy (ty, v)) name =
@@ -1488,7 +1488,7 @@ import Test.QuickCheck
 
 # Appendix: package dependencies {.unnumbered}
 
-```{.yaml file=package.yaml}
+```{.yaml .hpack file=package.yaml}
 name: union-types
 version: '0.1.0.0'
 category: Web
