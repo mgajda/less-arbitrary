@@ -73,6 +73,8 @@ and this more principled approach.
 
 ## Related work
 
+### Union type providers
+
 F# type providers for JSON allow to automatically
 derive schema, but the type system is
 _ad-hoc_[@type-providers-f-sharp].
@@ -98,6 +100,30 @@ that deliver partially satisfactory results,
 that we want to expand in order
 to systematically add more and more features.
 
+### Frameworks for expressing type systems
+
+Type systems are commonly expressed
+as partial relation of _typing_,
+and their properties, like subject reduction
+expressed relative to (also partial)
+relation of _reduction_ within a term rewriting
+system.
+
+There are general formulations
+of Hindley-Milner type systems relative parameterized
+by constraints [@HM-X,@Jones].
+
+We are not aware of any attempt
+to formulate general laws that would apply
+to all union type systems. Nor are we aware
+of any previous formulation that would
+use complete relations or functions
+in order to provide consistent
+mathematical descriptions of what
+happens where terms go beyond
+their desired types^[Or at least beyond `bottom`
+exploding to _infamous undefined behaviour_[@undefined1,@undefined2,@undefined3].]
+
 # Motivation
 
 ## Motivating examples
@@ -105,7 +131,7 @@ to systematically add more and more features.
 Now let's give some motivating examples from realm of JSON API types:
 
 1. Subsets of constructors:
-  * _API argument is email_ - this is subset of valid `String` values, that we can usefully validate on the client.
+  * _API argument is and email_ - this is subset of valid `String` values, that we can usefully validate on the client.
   * _Page size determines number of results to return (min: 10, max:10000)_ - this is also a subset of `Int` values between `10`, and `10000`
   * _`timestamp` contains ISO8601 date_ -- that is `String` like `"2019-03-03"` but not like `"The third day of March of the year 2019"`
 2. Optional fields:
@@ -444,17 +470,20 @@ digraph type {
 ``` {.haskell #basic-constraints}
 data StringConstraint =
     SCDate
-  | SCEnum (Set Text)
+  | SCEmail
+  | SCEnum  (Set Text)
   | SCNever
   | SCAny
   deriving(Eq, Show,Generic)
 
 instance StringConstraint `Types` Text where
-  infer (parseDate -> Just _) = SCDate
-  infer  value                = SCEnum $
+  infer (parseDate  -> Just _) = SCDate
+  infer (parseEmail -> Just _) = SCEmail
+  infer  value                 = SCEnum $
                       Set.singleton value
 
   check  SCDate     s = isJust $ parseDate s
+  check  SCEmail    s = isJust $ parseEmail s
   check (SCEnum vs) s = s `Set.member` vs
   check  SCNever    _ = False
   check  SCAny      _ = True
@@ -1322,13 +1351,15 @@ construction and derivation of type systems
 from specification of value domains
 and design constraints.
 
-# Bibliography
+# Bibliography {.unnumbered}
 
 ::::: {#refs}
 
 :::::
 
-# Appendix: module headers
+
+
+# Appendix: module headers {.unnumbered}
 
 ```{.haskell file=src/Unions.hs .hidden}
 {-# language AllowAmbiguousTypes    #-}
@@ -1416,6 +1447,10 @@ parseDate :: Text -> Maybe Day
 parseDate = fmap utctDay
           . parseISO8601
           . Text.unpack
+
+parseEmail :: Text -> Bool
+parseEmail = Text.Email.Validate.isValid
+           . Text.encodeUtf8
 ```
 
 ```{.haskell file=test/Spec.hs .hidden}
@@ -1484,7 +1519,7 @@ import Test.QuickCheck
 <<Typelike>>
 ```
 
-# Appendix: package dependencies
+# Appendix: package dependencies {.unnumbered}
 
 ```{.yaml file=}
 name: union-types
@@ -1517,6 +1552,7 @@ dependencies:
 - genvalidity-property
 - iso8601-time
 - time
+- email-validate
 library:
   source-dirs: src
   exposed-modules:
@@ -1529,4 +1565,4 @@ tests:
       - union-types
 ```
 
-# Appendix: Hindley-Milner as `Typelike`
+# Appendix: Hindley-Milner as `Typelike` {.unnumbered}
