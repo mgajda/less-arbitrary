@@ -425,13 +425,14 @@ is closed to information acquisition:
 typelikeSpec :: forall       ty.
                (Typelike     ty
                ,GenUnchecked ty
-               ,Typeable     ty)
+               ,Typeable     ty
+               ,Arbitrary    ty)
              => Spec
 typelikeSpec = do
   monoidSpec    @ty
   prop (nameOf  @ty <> " is commutative") $
     commutative @ty (<>)
-  prop "beyond set is closed" $
+  prop (nameOf  @ty <> "beyond set is closed") $
     beyond_is_closed @ty
 
 beyond_is_closed :: forall   ty.
@@ -521,11 +522,14 @@ typesSpec = do
       beyond_contains_all_terms       @ty @v
     prop "inferred type always contains its term" $ do
       inferred_type_contains_its_term @ty @v
+    prop (nameOf  @ty <> "fusion keeps terms") $
+      fusion_keeps_terms @ty @v
+
 ```
 First we note that to describe _no information_,
 `mempty` cannot correctly type any term:
 
-```{.haskell #typelike-spec}
+```{.haskell #types-spec}
 mempty_contains_no_terms
   :: forall    ty term.
      (Typelike ty
@@ -539,7 +543,7 @@ mempty_contains_no_terms term =
 
 It is also important for typing:
 all terms are typed successfully by any value `beyond`.
-```{.haskell #typelike-spec}
+```{.haskell #types-spec}
 beyond_contains_all_terms ::
      (Types ty    term
      ,Show        term)
@@ -552,7 +556,7 @@ beyond_contains_all_terms ty term =
 For typing we have additional rule:
 type inferred from a term, must always be valid
 for the very same term.
-``` {.haskell #typelike-spec}
+``` {.haskell #types-spec}
 inferred_type_contains_its_term ::
      forall ty         term.
             ty `Types` term
@@ -575,6 +579,20 @@ digraph type {
   Type  -> Bool [label="check with value"];
   Value -> Bool [label="const True"];
 }
+```
+
+The last law states that the terms are
+still correctly type checked after fusing
+more information into the type:
+```{.haskell #types-spec }
+fusion_keeps_terms :: forall   ty v.
+                     (Typelike ty
+                     ,ty `Types` v)
+                   => v -> ty -> ty -> Property
+fusion_keeps_terms v ty1 ty2 = do
+  check ty1 v ==>
+    check (ty1 <> ty2) v
+
 ```
 
 Minimal `Typelike` instance would be one
