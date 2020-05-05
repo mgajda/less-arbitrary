@@ -6,12 +6,13 @@ If inference fails, we can always correct it by adding additional example.
 Minimal definition of the typing inference and checking relations
 
 ```{.haskell file=refs/Data/Monoid.hs}
-commutativeSemigroupSpec :: forall    ty.
-                            Semigroup ty
-                         => Spec
-commutativeSemigroupSpec = do
-  commutative @ty
-  associative @ty
+class Semigroup ty where
+  (<>) :: ty -> ty -> ty
+
+class Semigroup ty
+   => Monoid    ty
+  where
+    mempty :: ty
 ```
 
 We describe laws as QuickCheck[@quickcheck]
@@ -20,7 +21,7 @@ obvious violations.
 
 We use `validity-properties` package[@validity]
 for common properties:
-```{.haskell file=refs/Data/Monoid.hs}
+```{.haskell #typelike-spec}
 commutativeSemigroupSpec :: forall    ty.
                             Semigroup ty
                          => Spec
