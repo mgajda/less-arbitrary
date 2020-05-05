@@ -1,4 +1,4 @@
-## ------ language="YAML" file="package.yaml" project://towards-better-union.md#1664
+## ------ language="YAML" file="package.yaml" project://towards-better-union.md#1737
 
 name: union-types
 version: '0.1.0.0'
@@ -30,6 +30,7 @@ dependencies:
 - iso8601-time
 - time
 - email-validate
+- generic-arbitrary
 library:
   source-dirs: src
   exposed-modules:

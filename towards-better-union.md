@@ -689,7 +689,7 @@ Analogically we may infer for integer constraints^[Program makes it optional `--
 data IntConstraint = IntRange Int Int
                    | IntNever
                    | IntAny
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
 
 instance Semigroup IntConstraint where
   IntAny       <> _            = IntAny
@@ -750,7 +750,7 @@ For any `T` value type Set T` satisfies our notion of _free type_.
 ``` { .haskell #freetype }
 data FreeType a = FreeType { captured :: Set a }
                 | Full
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Generic)
 
 instance (Ord a, Eq a) => Semigroup (FreeType a) where
   a <> b = FreeType $ (Set.union `on` captured) a b
@@ -1619,6 +1619,7 @@ import Data.Proxy
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
+import Test.QuickCheck.Arbitrary.Generic
 import Test.Validity hiding(check)
 import Test.Validity.Monoid
 import Test.Validity.Utils(nameOf)
@@ -1644,15 +1645,87 @@ instance Arbitrary Text.Text where
 instance Arbitrary Scientific where
   arbitrary = scientific <$> arbitrary <*> arbitrary
 
+instance (Arbitrary           a
+         ,Ord                 a)
+      =>  Arbitrary (FreeType a) where
+  arbitrary              = do
+    r <-choose (1,20::Int)
+    if r == 1
+      then pure Full
+      else FreeType <$> arbitrary
+  shrink  Full           = []
+  shrink (FreeType elts) = map FreeType
+                         $ shrink elts
+
+instance (Arbitrary             a
+         ,Ord                   a)
+      => GenUnchecked (FreeType a) where
+  genUnchecked    = arbitrary
+  shrinkUnchecked = shrink
+
+instance Validity (FreeType a) where
+  validate _ = validate True
+
+instance Arbitrary (PresenceConstraint a) where
+  arbitrary = genericArbitrary
+  shrink    = genericShrink
+
+instance Arbitrary IntConstraint where
+  arbitrary = genericArbitrary
+  shrink    = genericShrink
+
+instance Arbitrary NumberConstraint where
+  arbitrary = genericArbitrary
+  shrink    = genericShrink
+
+instance Arbitrary StringConstraint where
+  arbitrary = genericArbitrary
+  shrink    = genericShrink
+
+instance Arbitrary ObjectConstraint where
+  arbitrary = genericArbitrary
+  shrink    = genericShrink
+
+instance Arbitrary RecordConstraint where
+  arbitrary = RecordConstraint . Map.fromList
+           <$> arbitrary
+  shrink (RecordConstraint map) = do
+    RecordConstraint . Map.fromList <$> shrink (Map.toList map)
+
+instance Arbitrary ArrayConstraint where
+  arbitrary = genericArbitrary
+  shrink    = genericShrink
+
+instance Arbitrary  RowConstraint where
+  arbitrary = genericArbitrary
+  shrink    = genericShrink
+
+instance Arbitrary MappingConstraint where
+  arbitrary = genericArbitrary
+  shrink    = genericShrink
+
+instance Arbitrary UnionType where
+  arbitrary = genericArbitrary
+  shrink    = genericShrink
+
+instance GenUnchecked UnionType where
+  genUnchecked    = arbitrary
+  shrinkUnchecked = shrink
+
+instance Validity UnionType where
+  validate _ = validate True
+
 main = hspec spec
 
 spec = do
   describe "Free types" $ do
-    typelikeSpec @(FreeType Value)
-    typesSpec @(FreeType Value) @Value
+    arbitrarySpec @(FreeType Value)
+    typelikeSpec  @(FreeType Value)
+    typesSpec     @(FreeType Value) @Value
   describe "JSON types" $ do
-    typelikeSpec @UnionType
-    typesSpec    @UnionType @Value
+    arbitrarySpec @UnionType
+    typelikeSpec  @UnionType
+    typesSpec     @UnionType @Value
 
 <<typelike-spec>>
 <<types-spec>>
@@ -1691,6 +1764,7 @@ dependencies:
 - iso8601-time
 - time
 - email-validate
+- generic-arbitrary
 library:
   source-dirs: src
   exposed-modules:
