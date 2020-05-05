@@ -235,6 +235,30 @@ data Example {
   }
 ```
 
+::::: {#example:nonmonotonic-inference}
+
+Note that the last example above makes
+the type inference non-monotonic, since
+a dictionary with a single key would
+have an incompatible type:
+
+```
+data Example = Example { f_6408f5 :: O_6408f5 }
+data O_6408f5 = O_6408f5 {
+    size       :: Int
+  , height     :: Int
+  , difficulty :: Double
+  , previous   :: String
+  }
+```
+
+It also suggests that the user might want to
+explicitly add evidence for one of alternative
+representations in case samples are insufficient.
+(Like in case of single element dictionary.)
+
+:::::
+
 ## What is the goal of inference?
 
 Given another undocumented (or wrongly labelled) JSON API, we want to read the input
@@ -287,7 +311,7 @@ data Scientific =
 
 If inference fails, we can always correct it by adding additional example.
 
-Minimal definition of the typing inference and checking relations^[We describe laws as QuickCheck[@quickcheck] properties for convenience.]:
+Minimal definition of the typing inference and checking relations
 
 ```{.haskell file=refs/Data/Monoid.hs}
 class Semigroup ty where
@@ -297,6 +321,22 @@ class Semigroup ty
    => Monoid    ty
   where
     mempty :: ty
+<<class_laws_below>>
+```
+
+We describe laws as QuickCheck[@quickcheck]
+properties so that unit testing can detect
+obvious violations.
+
+We use `validity-properties` package[@validity]
+for common properties:
+```{.haskell file=refs/Data/Monoid.hs}
+commutativeSemigroupSpec :: forall    ty.
+                            Semigroup ty
+                         => Spec
+commutativeSemigroupSpec = do
+  commutative @ty
+  associative @ty
 ```
 
 Neutral element of the `Typelike` monoid,
@@ -359,18 +399,60 @@ class (Monoid   t
 That is because we want more than a single `beyond`
 element. When typing Haskell, we would
 like `beyond` to contain error message,
-which makes many.
+which makes many.^[Note that many, but not all
+type constraints will be semilattice. See counting example below.]
+
+Still we find it useful to state which `Typelike`s
+instances are semilattices:
+```
+idempotentSemigroupSpec :: forall    ty.
+                           Semigroup ty
+                        => Spec
+idempotentSemigroupSpec  = do
+  prop (nameOf @ty <> "is idempotent semigroup") $
+    idempotentSemigroup @ty
+
+idempotentOperation :: forall ty.
+                       Semigroup ty
+                    => ty -> Bool
+idempotentOperation op a = (a `op` a) `shouldBe` a
+```
 In case of union types, we accept that there
 are many elements in the `beyond` set.
 Key property of the `beyond` set, is that it
 is closed to information acquisition:
 ```{.haskell #typelike-spec}
-class_law_beyond :: Typelike ty => ty -> ty -> Bool
-class_law_beyond ty1 ty2 =
+typelikeSpec :: forall       ty.
+               (Typelike     ty
+               ,GenUnchecked ty
+               ,Typeable     ty)
+             => Spec
+typelikeSpec = do
+  monoidSpec    @ty
+  prop (nameOf  @ty <> " is commutative") $
+    commutative @ty (<>)
+  prop "beyond set is closed" $
+    beyond_is_closed @ty
+
+beyond_is_closed :: forall   ty.
+                    Typelike ty
+                 => ty -> ty -> Property
+beyond_is_closed ty1 ty2 = do
   beyond ty1 ==> beyond (ty1 <> ty2)
 ```
 
 It is convenient validation when testing a recursive structure of the type.
+
+Note that we abolish semilattice requirement
+that was traditionally assumed for
+type constraints here[@semilattice].
+
+That is because this requirement is valid
+only for strict type constraint inference,
+not for a more general type inference as a learning problem.
+As we saw in the example @example:row-constraint,
+we need non-monotonic inference when dealing
+with alternative representations.
 
 ### Typing relation
 
@@ -406,26 +488,7 @@ We call neutral element to be _no information given_
 or _no observation_, and maximum to be
 _no more information accepted_.
 
-#### Laws of typelike
-
-```{.haskell #typelike-spec}
-typelike_laws :: forall    ty.
-                (Typelike  ty
-                ,Arbitrary ty)
-              => Proxy     ty
-              -> String -> Spec
-typelike_laws (Proxy :: Proxy ty) name =
-  describe ("Typelike " <> name) $ do
-    describe "mempty is neutral element" $ do
-      prop "left"  $ \t -> mempty <> t      == (t   :: ty)
-      prop "right" $ \t -> t      <> mempty == (t   :: ty)
-    describe "beyond is absorbing element" $ do
-      prop "left"  $ \t -> beyond    <> t      == (beyond :: ty)
-      prop "right" $ \t -> t      <> beyond    == (beyond :: ty)
-    prop "commutative" $ \t u -> t <> u == u <> (t  :: ty)
-    prop "associative" $ \t u v ->  t <> (u  <>  v)
-                                == (t <>  u) <> (v  :: ty)
-```
+#### Laws of typing
 
 This is important, since we may
 want to separate concerns about
@@ -437,61 +500,66 @@ Note that this approach is a bit more relaxed than
 full lattice subtyping[@subtype-inequalities][@subtyping-lattice],
 since it only considers semilattice with unification operation.
 
-When we consider **union Typelike**, we also have
-additional laws:
 
-```{.haskell #typelike-spec}
-union_types_laws :: forall ty         v.
-                          (ty `Types` v
-                          ,Arbitrary  v
-                          ,Show       v)
-                 => Proxy (ty,        v)
-                 -> String
-                 -> Spec
-union_types_laws (Proxy :: Proxy (ty, v)) name =
-  describe ("union type " <> name) $ do
-    prop "mempty never satisfied" $
-      ((not . check (mempty :: ty)) :: v -> Bool)
-    prop "beyond always satisfied" $
-      ((check (beyond :: ty)) :: v -> Bool)
-```
-
-This is design choice that does not apply when
-using Typelike to represent static type discipline.
-
-Minimal `Typelike` instance would be one
-that contains only `mempty` for _no sample data received_,
-and `beyond` for _all values permitted_.
 
 ## Laws of typing
+
+```{.haskell #types-spec .hidden}
+typesSpec :: forall ty         v.
+                   (ty `Types` v
+                   ,Arbitrary  v
+                   ,Show       v
+                   ,Arbitrary  ty
+                   ,Show       ty
+                   ,Typeable   ty)
+          => Spec
+typesSpec = do
+  describe ("Types " <> nameOf @ty) $ do
+    prop "mempty contains no terms" $
+      mempty_contains_no_terms        @ty @v
+    prop "beyond contains all terms" $
+      beyond_contains_all_terms       @ty @v
+    prop "inferred type always contains its term" $ do
+      inferred_type_contains_its_term @ty @v
+```
+First we note that to describe _no information_,
+`mempty` cannot correctly type any term:
+
+```{.haskell #typelike-spec}
+mempty_contains_no_terms
+  :: forall    ty term.
+     (Typelike ty
+     ,Types    ty term)
+  =>              term
+  -> Expectation
+mempty_contains_no_terms term =
+      check (mempty :: ty) term
+        `shouldBe` False
+```
+
 It is also important for typing:
 all terms are typed successfully by any value `beyond`.
 ```{.haskell #typelike-spec}
-class_law_beyond :: Types ty term => term -> Property
-class_law_beyond term =
-  beyond ty ==> check ty term
+beyond_contains_all_terms ::
+     (Types ty    term
+     ,Show        term)
+  =>        ty -> term
+  -> Property
+beyond_contains_all_terms ty term =
+  beyond ty ==> term `shouldSatisfy` check ty
 ```
 
 For typing we have additional rule:
 type inferred from a term, must always be valid
 for the very same term.
 ``` {.haskell #typelike-spec}
-class_law_types :: ty `Types` term => term -> Bool
-class_law_types term =
-  check (infer term) term
-```
-
-```{.haskell #typeclass-spec .hidden}
-class_law_types :: ty `Types` term => Proxy ty -> term -> Bool
-class_law_types p term =
-  check_ p (infer_ p term) term
-```
-
-``` {.haskell .hidden #typeclass-spec}
-check_ :: ty `Types` term => Proxy ty -> ty -> term -> Bool
-check_ _ = check
-infer_ :: ty `Types` term => Proxy ty ->       term -> ty
-infer_ _ = infer
+inferred_type_contains_its_term ::
+     forall ty         term.
+            ty `Types` term
+  =>                   term
+  -> Bool
+inferred_type_contains_its_term term =
+  check ((infer:: term -> ty) term) (term :: term)
 ```
 
 Law asserts that the following diagram commutes:
@@ -508,6 +576,17 @@ digraph type {
   Value -> Bool [label="const True"];
 }
 ```
+
+Minimal `Typelike` instance would be one
+that contains only `mempty` for _no sample data received_,
+and `beyond` for _all values permitted_.
+
+Note that these laws are still compatible
+with strict, static type discipline:
+`beyond` set is a set of type errors then,
+and it is a task of a compiler to disallow
+any program with terms that type only to `beyond`
+as a least upper bound.
 
 ## Type engineering principles
 
@@ -1203,25 +1282,23 @@ for each
 6. Either a record of fixed names,
 or the mapping from hash to a single object type.
 
-
 ### Counting observations
 
 How can we make sure that we have a right number of samples?
 This is another example:
 ```json
-{"samples" : [
-    {"error"   : "Authorization failed",
-        "code" :  401}
-  , {"message" : "Where can I submit my proposal?",
-        "uid"  : 1014}
-  , {"message" : "Sent it to HotCRP",
-        "uid"  :   93}
-  , {"message" : "Thanks!",
-        "uid"  : 1014}
-  , {"error"   : "Authorization failed",
-        "code" :  401}
-  ]
-}
+{"samples":
+[{"error"  : "Authorization failed",
+  "code"   :  401}
+,{"message": "Where can I submit my proposal?",
+     "uid" : 1014}
+,{"message": "Sent it to HotCRP",
+     "uid" :   93}
+,{"message": "Thanks!",
+     "uid" : 1014}
+,{"error"  : "Authorization failed",
+     "code":  401}
+]}
 ```
 First we need to identify it as a list of same elements,
 and then to notice, that there are multiple instances of each record example.
@@ -1231,7 +1308,7 @@ of inferred records, and attempt to minimize the term.
 Next is detection of similarities between type descriptions developed
 for different parts of the term:
 ```json
-{"samples"      :  ...,
+{"samples"      :  [...],
  "last_message" : {"message": "Thanks!",
                       "uid" : 1014}
 }
@@ -1262,6 +1339,17 @@ instance Typelike          a
 We can connect `Counted` as parametric functor
 to our types in order to track auxiliary
 information.
+
+Note that the `Counted` constraint is the
+first example of constraint that is not
+a semilattice, that is `a<>a/=a`.
+
+This is because it is `Typelike`, but
+it is not a type constraint in a traditional sense,
+instead it counts the samples observed for the
+constraint inside, so we can decide
+which alternative representation is best supported
+by evidence.
 
 Thus at each step we might want to keep a **cardinality** of each possible value,
 and given enough samples, attempt to detect patterns ^[If we detect pattern to early, we risk make our types to narrow to work with actual API answers.].
@@ -1377,11 +1465,11 @@ usually follow one of two patterns:
 In both cases derivation of `Monoid`,
 and `Typelike` instances is the same.
 
-That allows us to use GHC `Generic`s[@generics]
+That allows us to use GHC `Generic`s[@generics,@generic-monoid]
 to define standard implementations
 for most of the boilerplate code!
 
-That means that we only will have to manulally define:
+That means that we only will have to manually define:
 * new constraint types,
 * inference from constructors (case 1)
 and entirety of handling alternative constraints
@@ -1490,9 +1578,11 @@ import           Data.Time.Clock(UTCTime(utctDay))
 {-# language Rank2Types            #-}
 {-# language MultiParamTypeClasses #-}
 {-# language ScopedTypeVariables   #-}
-{-# language StandaloneDeriving     #-}
+{-# language StandaloneDeriving    #-}
 {-# language TypeOperators         #-}
+{-# language TypeApplications      #-}
 {-# language UndecidableInstances  #-}
+{-# language AllowAmbiguousTypes   #-}
 module Main where
 
 import qualified Data.HashMap.Strict as Map
@@ -1502,6 +1592,7 @@ import qualified Data.Text.Encoding  as Text
 import Data.Scientific
 import Data.Aeson
 import Data.Proxy
+import Data.Typeable
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
@@ -1510,6 +1601,9 @@ import Data.Proxy
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
+import Test.Validity hiding(check)
+import Test.Validity.Monoid
+import Test.Validity.Utils(nameOf)
 
 import Unions
 
@@ -1536,15 +1630,14 @@ main = hspec spec
 
 spec = do
   describe "Free types" $ do
-    prop "law of class Types" $
-      (class_law_types (Proxy :: Proxy (FreeType Value))
-         :: Value -> Bool)
+    typelikeSpec @(FreeType Value)
+    typesSpec @(FreeType Value) @Value
   describe "JSON types" $ do
-    prop "law of class Types" $
-      (class_law_types (Proxy :: Proxy UnionType)
-         :: Value -> Bool)
+    typelikeSpec @UnionType
+    typesSpec    @UnionType @Value
 
 <<typelike-spec>>
+<<types-spec>>
 ```
 
 # Appendix: package dependencies {.unnumbered}
@@ -1574,7 +1667,6 @@ dependencies:
 - vector
 - unordered-containers
 - scientific
-- validity
 - genvalidity
 - genvalidity-hspec
 - genvalidity-property

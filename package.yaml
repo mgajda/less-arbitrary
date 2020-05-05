@@ -1,4 +1,4 @@
-## ------ language="YAML" file="package.yaml" project://towards-better-union.md#1553
+## ------ language="YAML" file="package.yaml" project://towards-better-union.md#1646
 
 name: union-types
 version: '0.1.0.0'
@@ -24,7 +24,6 @@ dependencies:
 - vector
 - unordered-containers
 - scientific
-- validity
 - genvalidity
 - genvalidity-hspec
 - genvalidity-property
