@@ -2,12 +2,12 @@
 
 ## Heuristics for better types
 
-Final touch would be to postprocess assigned type
+The final touch would be to postprocess assigned type
 before generating it, in order to make it more resilient
 to common uncertainties.
 
 Note that these assumptions my sidestep
-our validity criterion from initial part
+our validity criterion from the initial part
 of the paper, however they proved to work
 well in practice.
 
@@ -17,7 +17,7 @@ If we have no observations of array type,
 it can be inconvenient to disallow array to
 contain any value at all.
 Thus we make a non-monotonic step of
-converting final `mempty` to representation
+converting the `mempty` in the final `Typelike` to representation
 allowing any `Value` there on the input.
 
 That is because, our program must not have any assumptions
@@ -68,10 +68,10 @@ assigned to all objects, and propose
 to unify those that have more than 60% identical labels.
 
 For transparency, candidates found are logged for the user,
-and user can also indicate them explicitly instead
+and the user can also indicate them explicitly instead
 of relying on automation.
 
-We found that this greatly decreases complexity of the types,
+We found that this greatly decreases the complexity of types,
 and makes output less redundant.
 
 # Future work
@@ -96,11 +96,11 @@ usually follow one of two patterns:
 1. For typing terms that have a finite sum
   of disjoint constructors,
   we bin this information by constructor
-  during `infer`ence
+  during the `infer`ence
 2. for typing terms that have two alternative
   representations we apply
   we `infer` all constraints separately,
-  by applying `infer`ence to the same term
+  by applying the `infer`ence to the same term
 
 In both cases derivation of `Monoid`,
 and `Typelike` instances is the same.
@@ -145,9 +145,11 @@ in the future.
 
 This paves the way towards formal
 construction and derivation of type systems
-from specification of value domains
+from a specification of value domains
 and design constraints.
 
 # Bibliography {.unnumbered}
 
 ::::: {#refs}
+
+:::::

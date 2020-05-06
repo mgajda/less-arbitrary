@@ -138,7 +138,7 @@ instance (Ord      a
 
 
 This definition is sound, and for a finite realm of values, may make a sense.
-For a set of inputs^[Conforming to Haskell and JSON syntax, we use list for marking the elements of the set.]:
+For a set of inputs:
 `["yes", "no", "error"]`, we might reasonably say that type is indeed
 a good approximation of C-style enumeration, or Haskell-style ADT without constructor arguments.
 
@@ -285,7 +285,7 @@ data OurRecord2 = Message { message :: String
 The best attempt here, is to rely on our examples being reasonable exhaustive.
 That is, we can count how many examples we have for each, and how many out of them
 are matching. And then compare it to type complexity (with optionalities being more complex than lack of them.)
-In this case latter definition has only one choice (optionality), but we only have two samples to begin with.
+In this case, latter definition has only one choice (optionality), but we only have two samples to begin with.
 
 With more samples, the pattern emerges:
 ```{.json file=test/example_variant2.json}
@@ -382,6 +382,7 @@ instance RecordConstraint `Types` Object
           .  Map.toList
     check RCTop    _ = True
     check RCBottom _ = False
+    -- FIXME: treat extra keys!!!
     check rc obj
             | Map.keys (fields rc)
            == Map.keys        obj  =
@@ -452,8 +453,8 @@ Similarly to the object,
 information about all possible representations
 of the array:
 
-* an array of the same elements
-* row with the type depending on the column
+* an array of the same elements,
+* row with the type depending on the column.
 
 We need to gather information for both
 alternatives separately, and then
@@ -559,12 +560,12 @@ type `[UnionType]`.
 
 ### Putting it together into a union
 
-Since we have a union of just few possible constraints,
+Since we have the union of just the few possible constraints,
 we make it a record for easier processing:
 
-Note that given constraints for different type
-constructors, union type can be though of
-as mostly generic monoid[@generic-monoid]:
+Note that given constraints for the different type
+constructors, the union type can be though of
+as mostly a generic monoid[@generic-monoid]:
 
 ```{.haskell #type}
 data UnionType =
@@ -624,7 +625,7 @@ instance Typelike UnionType where
 
 Inference breaks disjoint alternatives
 to different record fields,
-depending on the constructor of given value.
+depending on the constructor of a given value.
 
 This allows as for clear and efficient
 treatment of values distinguished by different

@@ -22,12 +22,17 @@ obvious violations.
 We use `validity-properties` package[@validity]
 for common properties:
 ```{.haskell #typelike-spec}
-commutativeSemigroupSpec :: forall    ty.
-                            Semigroup ty
+commutativeSemigroupSpec :: forall       ty.
+                           (Semigroup    ty
+                           ,Show         ty
+                           ,Eq           ty
+                           ,GenUnchecked ty)
                          => Spec
 commutativeSemigroupSpec = do
-  commutative @ty
-  associative @ty
+  prop "commutative" $
+        commutative @ty (<>)
+  prop "associative" $
+        associative @ty (<>)
 ```
 
 Neutral element of the `Typelike` monoid,
@@ -119,7 +124,8 @@ typelikeSpec :: forall       ty.
                ,Typeable     ty
                ,Arbitrary    ty)
              => Spec
-typelikeSpec = do
+typelikeSpec = describe ("Typelike " <> nameOf @ty) $ do
+  commutativeSemigroupSpec @ty
   monoidSpec    @ty
   prop (nameOf  @ty <> " is commutative") $
     commutative @ty (<>)

@@ -27,7 +27,6 @@ import qualified Data.Foldable as Foldable
 import           Data.Time.Calendar(Day)
 import           Data.Either
 import           Data.Function(on)
-import           Data.Proxy
 import           Data.Text(Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding  as Text
@@ -64,6 +63,7 @@ import           Data.Time.Clock(UTCTime(utctDay))
 {-# language StandaloneDeriving    #-}
 {-# language TypeOperators         #-}
 {-# language TypeApplications      #-}
+{-# language TupleSections         #-}
 {-# language UndecidableInstances  #-}
 {-# language AllowAmbiguousTypes   #-}
 module Main where
@@ -73,6 +73,7 @@ import qualified Data.Set            as Set
 import qualified Data.Vector         as Vector
 import qualified Data.Text           as Text
 import qualified Data.Text.Encoding  as Text
+import Control.Monad(replicateM)
 import Data.Scientific
 import Data.Aeson
 import Data.Proxy
@@ -89,7 +90,6 @@ import Test.Validity hiding(check)
 import Test.Validity.Monoid
 import Test.Validity.Shrinking
 import Test.Validity.Utils(nameOf)
-
 
 import Unions
 
@@ -108,10 +108,20 @@ instance GenUnchecked Value where
   shrinkUnchecked (String _) = []  
   shrinkUnchecked (Number _) = []
   shrinkUnchecked (Array  a) =
-    Array <$> shrinkUnchecked a
+    Array . Vector.fromList <$>
+      shrinkList shrink (Vector.toList a)
   shrinkUnchecked (Object o) =
-    Object <$> shrinkUnchecked o
+    Object . Map.fromList <$> shrinkList shrinkItemValue (Map.toList o)
 
+shrinkItemValue (k, v) =
+  (k,) <$> shrink v
+
+arbitraryValue 0    = oneof [
+             pure Null
+           , Bool   <$> arbitrary
+           , String <$> arbitrary
+           , Number <$> arbitrary
+           ]
 arbitraryValue size = oneof [
              pure Null
            , Bool   <$> arbitrary
@@ -119,13 +129,18 @@ arbitraryValue size = oneof [
            , Number <$> arbitrary
            , Array   .  Vector.fromList
                     <$> listOf recurse
-           , Object <$> Map.fromList
-                    <$> listOf ((,) <$> arbitrary
-                                    <*> recurse)
+           -- FIXME
+           {-, Object <$> Map.fromList
+                    <$> listSized (\s -> (,) <$> arbitrary
+                                             <*> arbitraryValue s)-}
            ]
   where
+    listSized gen = sized $ \size -> do
+      listSize <- choose (0,size)
+      replicateM           listSize
+               $ gen (size `div` listSize)
     recurse = arbitraryValue
-            $ size `div` 4
+            $ size `div` 8
 
 instance Arbitrary Text.Text where
   arbitrary = Text.pack <$> arbitrary
@@ -136,18 +151,18 @@ instance Arbitrary Scientific where
 
 instance Arbitrary (FreeType Value) where
   arbitrary = sized $ \size -> do
-    r <-choose (0,size::Int)
+    r <-choose (0,10::Int)
     if r == 0
       then pure Full
       else FreeType . Set.fromList <$>
              listOf (arbitraryValue
-                       (size `div` 2))
+                       (size `div` 10))
   shrink  Full           = []
   shrink (FreeType elts) = map FreeType
                          $ shrink elts
 
-instance (Arbitrary   (FreeType a))
-      => GenUnchecked (FreeType a) where
+instance (Arbitrary    (FreeType a))
+      =>  GenUnchecked (FreeType a) where
   genUnchecked    = arbitrary
   shrinkUnchecked = shrink
 
@@ -184,6 +199,12 @@ instance Arbitrary ArrayConstraint where
   arbitrary = genericArbitrary
   shrink    = genericShrink
 
+arbitrarySizedArrayConstraint s =
+  ArrayConstraint <$> arbitrarySizedArrayConstraint (s `div` 2)
+                  <*> arbitrarySizedRowConstraint   (s `div` 2)
+
+arbitrarySizedRowConstraint size = undefined
+
 instance Arbitrary  RowConstraint where
   arbitrary = genericArbitrary
   shrink    = genericShrink
@@ -193,7 +214,13 @@ instance Arbitrary MappingConstraint where
   shrink    = genericShrink
 
 instance Arbitrary UnionType where
-  arbitrary = genericArbitrary
+  arbitrary = sized $ \s ->
+    UnionType <$> arbitrary -- NullConstraint
+              <*> arbitrary -- BoolConstraint
+              <*> arbitrary -- NumberConstraint
+              <*> arbitrary -- StringConstraint
+              <*> arbitrarySized (s `div` 2) -- ArrayConstraint
+              <*> arbitrarySized (s `div` 2)-- ObjectConstraint
   shrink    = genericShrink
 
 instance GenUnchecked UnionType where
@@ -307,7 +334,6 @@ encodeConstructors (Object o) =
 
 isValidDate :: Text -> Bool
 isValidDate = isJust
-            . fmap utctDay
             . parseISO8601
             . Text.unpack
 

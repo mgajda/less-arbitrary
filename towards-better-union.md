@@ -24,7 +24,10 @@ abstract: |
   generic, and easily extensible.
 date:   2020-04-04
 description: |
-  Musings on union types
+  Proposes a new framework for union types
+  that uses monoid and complete functions,
+  and enjoys easier theoretical treatment
+  than ad-hoc typing relations.
 link: "https://gitlab.com/migamake/json-autotype"
 bibliography:
   - towards-better-union.bib
