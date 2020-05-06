@@ -1,2 +1,7 @@
 out
 debug.json
+.vscode
+.ghc.*
+refs/
+dist/
+dist-newstyle/
