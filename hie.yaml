@@ -1,0 +1,16 @@
+cradle:
+  multi:
+    - path: ./src
+      config:
+        cradle:
+          stack:
+            component: "union-types:lib"
+    - path: ./test
+      config:
+        cradle:
+          stack:
+            component: "union-types:test:spec"
+    - path: ./refs
+      config:
+        cradle:
+            none:
