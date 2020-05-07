@@ -26,13 +26,14 @@ commutativeSemigroupSpec :: forall       ty.
                            (Semigroup    ty
                            ,Show         ty
                            ,Eq           ty
-                           ,GenUnchecked ty)
+                           ,Arbitrary    ty
+                           )
                          => Spec
 commutativeSemigroupSpec = do
   prop "commutative" $
-        commutative @ty (<>)
+        commutativeOnArbitrary @ty (<>)
   prop "associative" $
-        associative @ty (<>)
+        associativeOnArbitrary @ty (<>)
 ```
 
 Neutral element of the `Typelike` monoid,
@@ -120,17 +121,18 @@ is closed to information acquisition:
 ```{.haskell #typelike-spec}
 typelikeSpec :: forall       ty.
                (Typelike     ty
-               ,GenUnchecked ty
+               --,GenUnchecked ty
                ,Typeable     ty
                ,Arbitrary    ty)
              => Spec
 typelikeSpec = describe ("Typelike " <> nameOf @ty) $ do
-  commutativeSemigroupSpec @ty
-  monoidSpec    @ty
+  {-commutativeSemigroupSpec @ty
+  monoidSpec    @ty-}
   prop (nameOf  @ty <> " is commutative") $
-    commutative @ty (<>)
-  prop (nameOf  @ty <> "beyond set is closed") $
-    beyond_is_closed @ty
+    commutativeOnArbitrary @ty (<>)
+  -- need beyond generator!
+  {-prop (nameOf  @ty <> "beyond set is closed") $
+    beyond_is_closed @ty-}
 
 beyond_is_closed :: forall   ty.
                     Typelike ty
@@ -241,13 +243,20 @@ mempty_contains_no_terms term =
 It is also important for typing:
 all terms are typed successfully by any value `beyond`.
 ```{.haskell #types-spec}
-beyond_contains_all_terms ::
-     (Types ty    term
-     ,Show        term)
-  =>        ty -> term
-  -> Property
-beyond_contains_all_terms ty term =
-  beyond ty ==> term `shouldSatisfy` check ty
+beyond_contains_all_terms :: forall ty    term.
+                            (Types  ty    term
+                            ,Show         term)
+                          =>        ty -> term
+                          -> Property
+beyond_contains_all_terms ty term = do
+  beyond ty ==>
+    term `shouldSatisfy` check ty
+```
+
+However getting types `beyond` may be non-obvious for some instances.
+In this case we would use special generator `arbitraryBeyond`:
+```{.haskell #types-spec}
+beyond_contains_all_terms2 ty term = undefined
 ```
 
 For typing we have additional rule:
@@ -287,7 +296,7 @@ fusion_keeps_terms :: forall   ty v.
                      ,ty `Types` v)
                    => v -> ty -> ty -> Property
 fusion_keeps_terms v ty1 ty2 = do
-  check ty1 v ==>
+  check ty1 v || check ty2 v ==>
     check (ty1 <> ty2) v
 
 ```

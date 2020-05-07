@@ -64,14 +64,21 @@ instance Semigroup IntConstraint where
   _            <> IntAny       = IntAny
   IntNever     <> a            = a
   a            <> IntNever     = a
-  IntRange a b <> IntRange c d =
-                  IntRange (min a c) (max b d)
+  IntRange          a         b  <>
+    IntRange          c         d =
+      IntRange (min a c) (max b d)
 
 instance Typelike IntConstraint where
   beyond = (==IntAny)
 
 instance Monoid IntConstraint where
   mempty = IntNever
+
+instance IntConstraint `Types` Int where
+  infer                i = IntRange i i
+  check  IntNever      _ = False
+  check  IntAny        _ = True
+  check (IntRange a b) i = a <= i && i <= b
 ```
 
 JavaScript has one number type that holds both `Float` and `Int`, so JSON inherits that:

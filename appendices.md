@@ -86,44 +86,129 @@ import Test.QuickCheck
 import Test.QuickCheck.Arbitrary.Generic
 import Test.Validity hiding(check)
 import Test.Validity.Monoid
-import Test.Validity.Shrinking
+import Test.Validity.Shrinking.Property
 import Test.Validity.Utils(nameOf)
+import qualified GHC.Generics as Generic
 
 import LessArbitrary
 import Unions
 
 instance Arbitrary Value where
-  arbitrary = genericLessArbitrary
+  arbitrary = fasterArbitrary
 
 instance LessArbitrary Value where
+  lessArbitrary = cheap <$$$?> genericLessArbitrary
+    where
+      cheap = LessArbitrary.oneof [
+                pure       Null
+              , Bool   <$> lessArbitrary
+              , Number <$> lessArbitrary
+              ]
 
+instance Arbitrary Object where
+  arbitrary = fasterArbitrary
+
+{-
+instance LessArbitrary Object where
+  lessArbitrary =
+    pure Map.empty <$$$?>
+      (Map.fromList <$> lessArbitrary)-}
+
+instance Arbitrary Array where
+  arbitrary = fasterArbitrary
+
+class Typelike        ty
+   => ArbitraryBeyond ty where
+  arbitraryBeyond :: CostGen ty
+
+instance ArbitraryBeyond (PresenceConstraint a) where
+  arbitraryBeyond = pure Present
+
+instance ArbitraryBeyond StringConstraint where
+  arbitraryBeyond = pure SCAny
+
+instance ArbitraryBeyond IntConstraint where
+  arbitraryBeyond = pure IntAny
+
+instance ArbitraryBeyond NumberConstraint where
+  arbitraryBeyond = pure NCFloat
+
+instance ArbitraryBeyond RowConstraint where
+  arbitraryBeyond = pure RowTop
+
+instance ArbitraryBeyond RecordConstraint where
+  arbitraryBeyond = pure RCTop
+
+instance ArbitraryBeyond MappingConstraint where
+  arbitraryBeyond = MappingConstraint <$$$> arbitraryBeyond
+                                       <*>  arbitraryBeyond
+
+instance (Ord                      a
+         ,Show                     a
+         )
+      => ArbitraryBeyond (FreeType a) where
+  arbitraryBeyond = pure Full
+
+instance ArbitraryBeyond ObjectConstraint where
+  arbitraryBeyond = do
+    ObjectConstraint <$$$> arbitraryBeyond
+                      <*>  arbitraryBeyond
+
+instance ArbitraryBeyond ArrayConstraint where
+  arbitraryBeyond = do
+    ArrayConstraint <$$$> arbitraryBeyond
+                     <*>  arbitraryBeyond
+
+instance ArbitraryBeyond UnionType where
+  arbitraryBeyond =
+    UnionType       <$$$> arbitraryBeyond
+                     <*>  arbitraryBeyond
+                     <*>  arbitraryBeyond
+                     <*>  arbitraryBeyond
+                     <*>  arbitraryBeyond
+                     <*>  arbitraryBeyond
+
+arbitraryBeyondSpec :: forall          ty.
+                       ArbitraryBeyond ty
+                    => Spec
+arbitraryBeyondSpec =
+  prop "arbitraryBeyond returns terms beyond" $
+    (beyond <$> (arbitraryBeyond :: CostGen ty))
+    
+    
+{-instance LessArbitrary Array where
+  lessArbitrary =
+    pure Vector.empty <$$$?>
+      (Vector.fromList <$> lessArbitrary)
 instance Validity Value where
   validate _ = valid
 
 instance GenUnchecked Text.Text where
-  genUnchecked =  Text.pack <$> genericLessArbitrary
+  genUnchecked =  Text.pack <$> arbitrary
   shrinkUnchecked = map Text.pack
                   . shrinkUnchecked
                   . Text.unpack
 
 instance GenUnchecked Value where
-  genUnchecked = genericLessArbitrary
+  genUnchecked = fasterArbitrary
 
 instance GenUnchecked Scientific where
-  genUnchecked = scientific <$> arbitrary <*> arbitrary
+  genUnchecked = scientific <$> arbitrary
+                            <*> arbitrary
   shrinkUnchecked _ = []
 
 instance GenUnchecked Object where
-  genUnchecked =  Map.fromList <$> genericLessArbitrary
+  genUnchecked =  Map.fromList <$> fasterArbitrary
   shrinkUnchecked = map Map.fromList
                   . shrinkUnchecked
                   . Map.toList
 
 instance GenUnchecked Array where
-  genUnchecked =  Vector.fromList <$> genericLessArbitrary
+  genUnchecked =  Vector.fromList <$> fasterArbitrary
   shrinkUnchecked = map Vector.fromList
                   . shrinkUnchecked
                   . Vector.toList
+ -}
 
 instance LessArbitrary Text.Text where
   lessArbitrary = Text.pack <$> lessArbitrary
@@ -140,10 +225,10 @@ instance (LessArbitrary           a
       =>  LessArbitrary (FreeType a) where
 
 instance Arbitrary (FreeType Value) where
-  arbitrary = genericLessArbitrary
-  shrink  Full           = []
+  arbitrary = fasterArbitrary
+  {-shrink  Full           = []
   shrink (FreeType elts) = map FreeType
-                         $ shrink elts
+                         $ shrink elts-}
 
 instance (Eq                      a
          ,Ord                     a
@@ -152,7 +237,7 @@ instance (Eq                      a
          ,LessArbitrary (FreeType a)
          ,Arbitrary     (FreeType a))
       =>  GenUnchecked  (FreeType a) where
-  genUnchecked    = genericLessArbitrary
+  genUnchecked    = fasterArbitrary
   shrinkUnchecked Full                  = []
   shrinkUnchecked FreeType { captured } =
        map (FreeType . Set.fromList)
@@ -163,32 +248,40 @@ instance Validity (FreeType a) where
   validate _ = validate True
 
 instance LessArbitrary (PresenceConstraint a) where
+  lessArbitrary = genericLessArbitraryMonoid
 instance Arbitrary     (PresenceConstraint a) where
-  arbitrary = genericLessArbitrary
+  arbitrary = fasterArbitrary
 
 instance LessArbitrary IntConstraint where
+  lessArbitrary = genericLessArbitraryMonoid
 instance Arbitrary     IntConstraint where
-  arbitrary = genericLessArbitrary
+  arbitrary = fasterArbitrary
 
 instance LessArbitrary NumberConstraint where
+  lessArbitrary = genericLessArbitraryMonoid
+
 instance Arbitrary     NumberConstraint where
-  arbitrary = genericLessArbitrary
+  arbitrary = fasterArbitrary
 
 instance LessArbitrary StringConstraint where
+  lessArbitrary = genericLessArbitraryMonoid
 instance Arbitrary     StringConstraint where
-  arbitrary = genericLessArbitrary
+  arbitrary = fasterArbitrary
 
 instance LessArbitrary ObjectConstraint where
+  lessArbitrary = genericLessArbitraryMonoid
 instance Arbitrary     ObjectConstraint where
-  arbitrary = genericLessArbitrary
+  arbitrary = fasterArbitrary
 
 instance LessArbitrary RecordConstraint where
+  lessArbitrary = genericLessArbitraryMonoid
 instance Arbitrary     RecordConstraint where
-  arbitrary = genericLessArbitrary
+  arbitrary = fasterArbitrary
 
 instance LessArbitrary ArrayConstraint where
+  lessArbitrary = genericLessArbitraryMonoid
 instance Arbitrary     ArrayConstraint where
-  arbitrary = genericLessArbitrary
+  arbitrary = fasterArbitrary
 
 {-}
 arbitrarySizedArrayConstraint s =
@@ -198,16 +291,32 @@ arbitrarySizedArrayConstraint s =
 --arbitrarySizedRowConstraint size = undefined
 
 instance LessArbitrary RowConstraint where
+  lessArbitrary = genericLessArbitraryMonoid
+
 instance Arbitrary     RowConstraint where
-  arbitrary = genericLessArbitrary
+  arbitrary = fasterArbitrary
 
 instance LessArbitrary MappingConstraint where
+  lessArbitrary = genericLessArbitraryMonoid
 instance Arbitrary     MappingConstraint where
-  arbitrary = genericLessArbitrary
+  arbitrary = fasterArbitrary
 
 instance LessArbitrary UnionType where
+  lessArbitrary = genericLessArbitraryMonoid
+  {-
+    budget <- currentBudget
+    if budget > 0
+       then id <$$$> (Generic.to <$> lessArbitrary)
+       else UnionType <$> lessArbitrary
+                      <*> lessArbitrary
+                      <*> lessArbitrary
+                      <*> lessArbitrary
+                      <*> pure mempty -- array
+                      <*> pure mempty -- object -}
+
+
 instance Arbitrary     UnionType where
-  arbitrary = genericLessArbitrary
+  arbitrary = fasterArbitrary
   {-sized $ \s ->
     UnionType <$> arbitrary -- NullConstraint
               <*> arbitrary -- BoolConstraint
@@ -225,20 +334,52 @@ instance Validity UnionType where
 
 main = hspec spec
 
+shrinkSpec :: forall    a.
+             (Arbitrary a
+             ,Typeable  a
+             ,Show      a
+             ,Eq        a
+             )
+           => Spec
+shrinkSpec = prop ("shrink on " <> nameOf @a)
+           $ doesNotShrinkToItself arbitrary (shrink :: a -> [a])
+
+allSpec :: forall         ty v.
+           (Typeable        ty
+            ,Arbitrary       ty
+            ,Show            ty
+            ,Types           ty v
+            ,ArbitraryBeyond ty
+            ,Arbitrary          v
+            ,Show               v
+            ) => Spec
+allSpec = describe (nameOf @ty) $ do
+  arbitraryBeyondSpec @ty
+  shrinkSpec    @ty
+  typelikeSpec  @ty
+  typesSpec     @ty @v
+
 spec = do
   describe "Value" $ do
-    arbitrarySpec @Value
-    prop "shrink" $ shrinkUncheckedDoesNotShrinkToItself @Value
-  describe "Free types" $ do
-    arbitrarySpec @(FreeType Value)
-    prop "shrink" $ shrinkUncheckedDoesNotShrinkToItself @(FreeType Value)
+    --arbitrarySpec @Value
+    shrinkSpec    @Value
+    --describe "Free types" $ do
+  allSpec @(FreeType Value) @Value
+    {-arbitrarySpec @(FreeType Value)
+    shrinkSpec    @(FreeType Value)
     typelikeSpec  @(FreeType Value)
-    typesSpec     @(FreeType Value) @Value
-  describe "JSON types" $ do
-    arbitrarySpec @UnionType
-    prop "shrink" $ shrinkUncheckedDoesNotShrinkToItself @UnionType
-    typelikeSpec  @UnionType
-    typesSpec     @UnionType @Value
+    typesSpec     @(FreeType Value) @Value-}
+  allSpec @NullConstraint    @()
+  allSpec @BoolConstraint    @Bool
+  allSpec @StringConstraint  @Text.Text
+  allSpec @IntConstraint     @Int
+  allSpec @NumberConstraint  @Scientific
+  {-allSpec @RowConstraint     @Array
+  allSpec @ArrayConstraint   @Array
+  allSpec @MappingConstraint @Object
+  allSpec @RecordConstraint  @Object
+  allSpec @ObjectConstraint  @Object
+  allSpec @UnionType         @Value-}
 
 <<typelike-spec>>
 <<types-spec>>
@@ -364,11 +505,15 @@ isValidEmail = Text.Email.Validate.isValid
 module LessArbitrary(
     LessArbitrary(..)
   , oneof
+  , CostGen(..)
   , (<$$$>)
   , (<$$$?>)
   , currentBudget
+  , fasterArbitrary
   , genericLessArbitrary
-  , flatArbitrary
+  , genericLessArbitraryMonoid
+  , flatLessArbitrary
+  , spend
   ) where
 
 import qualified Data.HashMap.Strict as Map
@@ -403,7 +548,7 @@ import qualified Test.QuickCheck as QC
 import qualified Test.QuickCheck.Arbitrary as QC
 import Data.Hashable
 
-newtype Cost = Cost Int
+newtype Cost = Cost { unCost :: Int }
   deriving (Eq,Ord,Enum,Bounded,Num)
 
 newtype CostGen                               a =
@@ -414,8 +559,11 @@ newtype CostGen                               a =
 -- Mark a costly constructor with this instead of `<$>`
 (<$$$>) :: (a -> b) -> CostGen a -> CostGen b
 costlyConstructor <$$$> arg = do
-  CostGen $ State.modify (-1+)
+  spend 1
   costlyConstructor <$> arg
+
+spend :: Cost -> CostGen ()
+spend c = CostGen $ State.modify (-c+)
 
 oneof   :: [CostGen a] -> CostGen a
 oneof [] = error "LessArbitrary.oneof used with empty list"
@@ -429,13 +577,12 @@ choose      :: Random  a
             -> CostGen a
 choose (a,b) = CostGen $ lift $ QC.choose (a, b)
 
-(<$$$?>) :: [CostGen a] -> [CostGen a] -> CostGen a
+(<$$$?>) :: CostGen a -> CostGen a -> CostGen a
 cheapVariants <$$$?> costlyVariants = do
   budget <- CostGen State.get
-  oneof $ cheapVariants
-       <> if budget > (0 :: Cost)
-             then costlyVariants
-             else [] 
+  if budget > (0 :: Cost)
+     then costlyVariants
+     else cheapVariants
 
 currentBudget :: CostGen Cost
 currentBudget = CostGen State.get
@@ -475,7 +622,7 @@ withCost cost gen = runCostGen gen
   `State.evalStateT` Cost cost
 
 defaultCost :: Int
-defaultCost = 1000
+defaultCost  = 100
 
 {-
 instance LessArbitrary a
@@ -498,7 +645,8 @@ instance LessArbitrary       c
       => CGArbitrary (G.K1 i c) where
   cgArbitrary = G.K1 <$> lessArbitrary
 
-instance CGArbitrary f => CGArbitrary (G.M1 i c f) where
+instance CGArbitrary f
+      => CGArbitrary (G.M1 i c f) where
   cgArbitrary = G.M1 <$> cgArbitrary
 
 instance (CGArbitrary a, CGArbitrary b) => CGArbitrary (a G.:*: b) where
@@ -508,7 +656,7 @@ instance (CGArbitrary a, CGArbitrary b) => CGArbitrary (a G.:*: b) where
 -- Internal use only.
 type family SumLen a :: Nat where
   SumLen (a G.:+: b) = (SumLen a) + (SumLen b)
-  SumLen (a G.:*: b) = (SumLen a) + (SumLen b)
+  --SumLen (a G.:*: b) = (SumLen a) + (SumLen b)
   SumLen  a          =  1
 
 type family ConsCost a :: Nat where
@@ -526,8 +674,18 @@ instance (CGArbitrary      a,  CGArbitrary      b,
       lfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen a))
       rfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen b))
 
-genericLessArbitrary :: (Generic a, CGArbitrary (Rep a)) => QC.Gen a
-genericLessArbitrary = withCost defaultCost (to <$> cgArbitrary)
+fasterArbitrary :: LessArbitrary a => QC.Gen a
+fasterArbitrary = sizedCost lessArbitrary
+
+genericLessArbitrary :: (Generic a, CGArbitrary (Rep a)) => CostGen a
+genericLessArbitrary = to <$> cgArbitrary
+
+genericLessArbitraryMonoid :: (Generic          a
+                              ,CGArbitrary (Rep a)
+                              ,Monoid           a)
+                           =>  CostGen          a
+genericLessArbitraryMonoid  =
+  pure mempty <$$$?> genericLessArbitrary
 
 type family Min m n where
   Min m n = Min_ m n (CmpNat m n)
@@ -538,19 +696,19 @@ type family Min_ (m::Nat) (n::Nat) (o::Ordering) where
   Min_ m n 'GT = n
 
 instance LessArbitrary Bool where
-  lessArbitrary = flatArbitrary
+  lessArbitrary = flatLessArbitrary
 
 instance LessArbitrary Int where
-  lessArbitrary = flatArbitrary
+  lessArbitrary = flatLessArbitrary
 
 instance LessArbitrary Integer where
-  lessArbitrary = flatArbitrary
+  lessArbitrary = flatLessArbitrary
 
 instance LessArbitrary Double where
-  lessArbitrary = flatArbitrary
+  lessArbitrary = flatLessArbitrary
 
 instance LessArbitrary Char where
-  lessArbitrary = flatArbitrary
+  lessArbitrary = flatLessArbitrary
 
 instance (LessArbitrary k
          ,LessArbitrary   v)
@@ -572,18 +730,30 @@ instance (LessArbitrary              k
 
 instance LessArbitrary  a
       => LessArbitrary [a] where
+  lessArbitrary = pure [] <$$$?> do
+    len  <- choose (1,100) -- FIXME: use sized
+    spend $ Cost len
+    replicateM   len lessArbitrary
 
 instance LessArbitrary Scientific where
   lessArbitrary =
     scientific <$> lessArbitrary
                <*> lessArbitrary
 
-flatArbitrary :: QC.Arbitrary a
+flatLessArbitrary :: QC.Arbitrary a
               => CostGen a
-flatArbitrary  = CostGen $ lift QC.arbitrary
+flatLessArbitrary  = CostGen $ lift QC.arbitrary
 
 instance LessArbitrary                a
       => LessArbitrary (Vector.Vector a) where
   lessArbitrary = Vector.fromList <$> lessArbitrary
+
+sizedCost :: CostGen a -> QC.Gen a
+sizedCost gen = QC.sized $ (`withCost` gen)
+
+instance QC.Testable          a
+      => QC.Testable (CostGen a) where
+  property = QC.property
+           . sizedCost
 
 ```
