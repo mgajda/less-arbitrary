@@ -332,8 +332,6 @@ instance GenUnchecked UnionType where
 instance Validity UnionType where
   validate _ = validate True
 
-main = hspec spec
-
 shrinkSpec :: forall    a.
              (Arbitrary a
              ,Typeable  a
@@ -356,8 +354,8 @@ allSpec :: forall         ty v.
 allSpec = describe (nameOf @ty) $ do
   arbitraryBeyondSpec @ty
   shrinkSpec    @ty
-  typelikeSpec  @ty
-  typesSpec     @ty @v
+  --typelikeSpec  @ty
+  --typesSpec     @ty @v
 
 spec = do
   describe "Value" $ do
@@ -383,6 +381,10 @@ spec = do
 
 <<typelike-spec>>
 <<types-spec>>
+
+return []
+main = $quickcheckAll
+--hspec spec
 ```
 
 # Appendix: package dependencies {.unnumbered}
