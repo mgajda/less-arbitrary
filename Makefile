@@ -1,11 +1,15 @@
 #SRC=plan.md
 NAME=towards-better-union
-SRC=${NAME}.md
-PDF=out/${SRC:.md=.pdf}
+SRC=towards-better-union.md \
+    typelike.md \
+    constraints.md \
+    final.md \
+    appendices.md
+PDF=out/${NAME}.pdf
 #TPDF=out/${SRC:.md=_te.pdf}
-HTML=out/${SRC:.md=.html}
-TEX=out/${SRC:.md=.tex}
-DOCX=out/${SRC:.md=.docx}
+HTML=out/${NAME}.html
+TEX=out/${NAME}.tex
+DOCX=out/${NAME}.docx
 REFDOCX=acm_submission_template.docx
 PICS=offset-array-example.eps
 OPTIONS=--mathml				\

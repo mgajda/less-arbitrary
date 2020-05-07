@@ -1,4 +1,4 @@
-## ------ language="YAML" file="package.yaml" project://appendices.md#257
+## ------ language="YAML" file="package.yaml" project://appendices.md#250
 
 name: union-types
 version: '0.1.0.0'
@@ -31,6 +31,8 @@ dependencies:
 - time
 - email-validate
 - generic-arbitrary
+- mtl
+- hashable
 library:
   source-dirs: src
   exposed-modules:
@@ -41,4 +43,8 @@ tests:
     source-dirs: test
     dependencies:
       - union-types
+      - mtl
+      - random
+      - transformers
+      - hashable
 ## ------ end

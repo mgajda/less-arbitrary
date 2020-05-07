@@ -32,10 +32,15 @@ instance StringConstraint `Types` Text where
 Then whenever unifying the `String` constraint:
 ```{.haskell #basic-constraints}
 instance Semigroup StringConstraint where
-  SCDate     <> (SCEnum _)     = SCAny
-  (SCEnum a) <> (SCEnum b)
-    | length a + length b < 10 = SCEnum (a <> b)
-  (SCEnum a) <> (SCEnum b)     = SCAny
+  SCNever    <>  a             = a
+  a          <>  SCNever       = a
+  SCAny      <>  _             = SCAny
+  _          <>  SCAny         = SCAny
+  SCDate     <>  SCDate        = SCDate
+  SCEmail    <>  SCEmail       = SCEmail
+  (SCEnum a) <> (SCEnum b)     |
+          length (a <> b) < 10 = SCEnum (a <> b)
+  _          <>  _             = SCAny
 
 instance Monoid StringConstraint where
   mappend = (<>)
@@ -56,6 +61,7 @@ data IntConstraint = IntRange Int Int
 
 instance Semigroup IntConstraint where
   IntAny       <> _            = IntAny
+  _            <> IntAny       = IntAny
   IntNever     <> a            = a
   a            <> IntNever     = a
   IntRange a b <> IntRange c d =
@@ -540,6 +546,10 @@ instance RowConstraint `Types` Array where
   check  _        _ = False
 
 instance Semigroup RowConstraint where
+  RowTop    <> _             = RowTop
+  _         <> RowTop        = RowTop
+  RowBottom <> a             = a
+  a         <> RowBottom     = a
   Row bs    <> Row cs
     | length bs /= length cs = RowTop
   Row bs    <> Row cs        =
@@ -640,14 +650,18 @@ instance UnionType `Types` Value where
   infer (String s) = mempty { unionStr  = infer s  }
   infer (Object o) = mempty { unionObj  = infer o  }
   infer (Array  a) = mempty { unionArr  = infer a  }
-  check UnionType { unionNum } (Number n) =
-              check unionNum           n
-  check UnionType { unionStr } (String s) =
-              check unionStr           s
-  check UnionType { unionObj } (Object o) =
-              check unionObj           o
-  check UnionType { unionArr } (Array  a) =
-              check unionArr           a
+  check UnionType { unionBool } (Bool   b) =
+              check unionBool          b
+  check UnionType { unionNull }  Null      =
+              check unionNull         ()
+  check UnionType { unionNum  } (Number n) =
+              check unionNum            n
+  check UnionType { unionStr  } (String s) =
+              check unionStr            s
+  check UnionType { unionObj  } (Object o) =
+              check unionObj            o
+  check UnionType { unionArr  } (Array  a) =
+              check unionArr            a
 ```
 
 ### Overlapping alternatives
