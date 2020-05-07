@@ -89,6 +89,7 @@ import Test.Validity.Monoid
 import Test.Validity.Shrinking.Property
 import Test.Validity.Utils(nameOf)
 import qualified GHC.Generics as Generic
+import Test.QuickCheck.Classes
 
 import LessArbitrary
 import Unions
@@ -169,46 +170,12 @@ instance ArbitraryBeyond UnionType where
                      <*>  arbitraryBeyond
 
 arbitraryBeyondSpec :: forall          ty.
-                       ArbitraryBeyond ty
+                      (ArbitraryBeyond ty
+                      ,Typelike        ty)
                     => Spec
 arbitraryBeyondSpec =
-  prop "arbitraryBeyond returns terms beyond" $
+  prop "arbitrarybeyond returns terms beyond" $
     (beyond <$> (arbitraryBeyond :: CostGen ty))
-    
-    
-{-instance LessArbitrary Array where
-  lessArbitrary =
-    pure Vector.empty <$$$?>
-      (Vector.fromList <$> lessArbitrary)
-instance Validity Value where
-  validate _ = valid
-
-instance GenUnchecked Text.Text where
-  genUnchecked =  Text.pack <$> arbitrary
-  shrinkUnchecked = map Text.pack
-                  . shrinkUnchecked
-                  . Text.unpack
-
-instance GenUnchecked Value where
-  genUnchecked = fasterArbitrary
-
-instance GenUnchecked Scientific where
-  genUnchecked = scientific <$> arbitrary
-                            <*> arbitrary
-  shrinkUnchecked _ = []
-
-instance GenUnchecked Object where
-  genUnchecked =  Map.fromList <$> fasterArbitrary
-  shrinkUnchecked = map Map.fromList
-                  . shrinkUnchecked
-                  . Map.toList
-
-instance GenUnchecked Array where
-  genUnchecked =  Vector.fromList <$> fasterArbitrary
-  shrinkUnchecked = map Vector.fromList
-                  . shrinkUnchecked
-                  . Vector.toList
- -}
 
 instance LessArbitrary Text.Text where
   lessArbitrary = Text.pack <$> lessArbitrary
@@ -283,13 +250,6 @@ instance LessArbitrary ArrayConstraint where
 instance Arbitrary     ArrayConstraint where
   arbitrary = fasterArbitrary
 
-{-}
-arbitrarySizedArrayConstraint s =
-  ArrayConstraint <$> arbitrarySizedConstraint    (s `div` 2)
-                  <*> arbitrarySizedRowConstraint (s `div` 2) -}
-
---arbitrarySizedRowConstraint size = undefined
-
 instance LessArbitrary RowConstraint where
   lessArbitrary = genericLessArbitraryMonoid
 
@@ -303,34 +263,17 @@ instance Arbitrary     MappingConstraint where
 
 instance LessArbitrary UnionType where
   lessArbitrary = genericLessArbitraryMonoid
-  {-
-    budget <- currentBudget
-    if budget > 0
-       then id <$$$> (Generic.to <$> lessArbitrary)
-       else UnionType <$> lessArbitrary
-                      <*> lessArbitrary
-                      <*> lessArbitrary
-                      <*> lessArbitrary
-                      <*> pure mempty -- array
-                      <*> pure mempty -- object -}
-
 
 instance Arbitrary     UnionType where
   arbitrary = fasterArbitrary
-  {-sized $ \s ->
-    UnionType <$> arbitrary -- NullConstraint
-              <*> arbitrary -- BoolConstraint
-              <*> arbitrary -- NumberConstraint
-              <*> arbitrary -- StringConstraint
-              <*> arbitrarySized (s `div` 2) -- ArrayConstraint
-              <*> arbitrarySized (s `div` 2)-- ObjectConstraint-}
 
 instance GenUnchecked UnionType where
   genUnchecked    = arbitrary
   shrinkUnchecked = shrink
 
+{-
 instance Validity UnionType where
-  validate _ = validate True
+  validate _ = validate True-}
 
 shrinkSpec :: forall    a.
              (Arbitrary a
@@ -357,33 +300,114 @@ allSpec = describe (nameOf @ty) $ do
   --typelikeSpec  @ty
   --typesSpec     @ty @v
 
+{-
 spec = do
-  describe "Value" $ do
-    --arbitrarySpec @Value
-    shrinkSpec    @Value
+  putStrLn "Value" $
+    arbitrarySpec @Value
+  quickcheck $ shrinkSpec    @Value
     --describe "Free types" $ do
   allSpec @(FreeType Value) @Value
-    {-arbitrarySpec @(FreeType Value)
+    arbitrarySpec @(FreeType Value)
     shrinkSpec    @(FreeType Value)
     typelikeSpec  @(FreeType Value)
-    typesSpec     @(FreeType Value) @Value-}
+    typesSpec     @(FreeType Value) @Value
   allSpec @NullConstraint    @()
   allSpec @BoolConstraint    @Bool
   allSpec @StringConstraint  @Text.Text
   allSpec @IntConstraint     @Int
   allSpec @NumberConstraint  @Scientific
-  {-allSpec @RowConstraint     @Array
+  allSpec @RowConstraint     @Array
   allSpec @ArrayConstraint   @Array
   allSpec @MappingConstraint @Object
   allSpec @RecordConstraint  @Object
   allSpec @ObjectConstraint  @Object
-  allSpec @UnionType         @Value-}
+  allSpec @UnionType         @Value
+  -}
 
 <<typelike-spec>>
 <<types-spec>>
 
+{-
+prop_arbitrary_beyond :: forall ty. Typelike ty => Property
+prop_arbitrary_beyond = do
+  b <- arbitraryBeyond
+  return $ beyond (b :: ty)
+ -}
+
+shrinkCheck :: forall    term.
+              (Arbitrary term
+              ,Eq        term)
+            =>           term
+            -> Bool
+shrinkCheck term =
+  term `notElem` shrink term
+
+arbitraryLaws :: forall    ty.
+                (Arbitrary ty
+                ,Show      ty
+                ,Eq        ty)
+              => Proxy     ty
+              -> Laws
+arbitraryLaws (Proxy :: Proxy ty) =
+  Laws "arbitrary" [("does not shrink to itself", property (shrinkCheck :: ty -> Bool))]
+
+typesLaws :: (Typeable  ty
+             ,Typeable     term
+             ,Monoid    ty
+             ,Arbitrary ty
+             ,Arbitrary    term
+             ,Show      ty
+             ,Show         term
+             ,Eq        ty
+             ,Eq           term)
+          =>  Proxy     ty
+          ->  Proxy        term
+          -> (String, [Laws])
+typesLaws (tyProxy :: Proxy ty) (termProxy :: Proxy term) =
+  (nameOf @ty <> " types " <> nameOf @term, [
+      arbitraryLaws tyProxy
+    , eqLaws        tyProxy
+    , monoidLaws    tyProxy
+    , arbitraryLaws termProxy
+    , eqLaws        termProxy
+    ])
+
+main = do
+  putStrLn "NumberConstraint"
+  quickCheck $ shrinkCheck @NumberConstraint
+  lawsCheck  $ monoidLaws (Proxy :: Proxy NumberConstraint)
+  lawsCheckMany 
+    [typesLaws (Proxy :: Proxy (FreeType Value) ) (Proxy :: Proxy Value)
+    ,typesLaws (Proxy :: Proxy NumberConstraint ) (Proxy :: Proxy Scientific)
+    ,typesLaws (Proxy :: Proxy StringConstraint ) (Proxy :: Proxy String)
+    ,typesLaws (Proxy :: Proxy BoolConstraint   ) (Proxy :: Proxy Bool)
+    ,typesLaws (Proxy :: Proxy NullConstraint   ) (Proxy :: Proxy ()  )
+    ,typesLaws (Proxy :: Proxy RowConstraint    ) (Proxy :: Proxy Array  )
+    ,typesLaws (Proxy :: Proxy ArrayConstraint  ) (Proxy :: Proxy Array  )
+    ,typesLaws (Proxy :: Proxy MappingConstraint) (Proxy :: Proxy Object  )
+    ,typesLaws (Proxy :: Proxy RecordConstraint ) (Proxy :: Proxy Object  )
+    ,typesLaws (Proxy :: Proxy ObjectConstraint ) (Proxy :: Proxy Object  )
+    ,typesLaws (Proxy :: Proxy UnionType        ) (Proxy :: Proxy Value   )
+    ]
+{-
+  allSpec @NullConstraint    @()
+  allSpec @BoolConstraint    @Bool
+  allSpec @StringConstraint  @Text.Text
+  allSpec @IntConstraint     @Int
+  allSpec @NumberConstraint  @Scientific
+  allSpec @RowConstraint     @Array
+  allSpec @ArrayConstraint   @Array
+  allSpec @MappingConstraint @Object
+  allSpec @RecordConstraint  @Object
+  allSpec @ObjectConstraint  @Object
+  allSpec @UnionType         @Value
+ -}
+
+  
+{-
 return []
 main = $quickcheckAll
+ -}
 --hspec spec
 ```
 
@@ -437,6 +461,7 @@ tests:
       - random
       - transformers
       - hashable
+      - quickcheck-classes
 ```
 
 # Appendix: Hindley-Milner as `Typelike` {.unnumbered}
@@ -757,5 +782,8 @@ instance QC.Testable          a
       => QC.Testable (CostGen a) where
   property = QC.property
            . sizedCost
+
+forAll gen prop = do
+  gen >>= prop
 
 ```

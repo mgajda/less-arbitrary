@@ -138,7 +138,8 @@ beyond_is_closed :: forall   ty.
                     Typelike ty
                  => ty -> ty -> Property
 beyond_is_closed ty1 ty2 = do
-  beyond ty1 ==> beyond (ty1 <> ty2)
+  beyond (ty1 :: ty) ==> beyond (ty1 <> ty2)
+
 ```
 
 It is convenient validation when testing a recursive structure of the type.
@@ -205,8 +206,10 @@ since it only considers semilattice with unification operation.
 ## Laws of typing
 
 ```{.haskell #types-spec .hidden}
+
 typesSpec :: forall ty         v.
                    (ty `Types` v
+                   ,Typelike ty
                    ,Arbitrary  v
                    ,Show       v
                    ,Arbitrary  ty
@@ -256,7 +259,15 @@ beyond_contains_all_terms ty term = do
 However getting types `beyond` may be non-obvious for some instances.
 In this case we would use special generator `arbitraryBeyond`:
 ```{.haskell #types-spec}
-beyond_contains_all_terms2 ty term = undefined
+
+{-
+beyond_contains_all_terms2 :: forall   ty term.
+                             (Typelike ty
+                             ,Types    ty term)
+                           => term -> _
+beyond_contains_all_terms2 term =
+  forAll arbitraryBeyond $ (`check` term)
+  -}
 ```
 
 For typing we have additional rule:
@@ -290,6 +301,7 @@ digraph type {
 The last law states that the terms are
 still correctly type checked after fusing
 more information into the type:
+
 ```{.haskell #types-spec }
 fusion_keeps_terms :: forall   ty v.
                      (Typelike ty
