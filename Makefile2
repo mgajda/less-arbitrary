@@ -1,10 +1,6 @@
 #SRC=plan.md
-NAME=towards-better-union
-SRC=towards-better-union.md \
-    typelike.md \
-    constraints.md \
-    final.md \
-    appendices.md
+NAME=less-arbitrary
+SRC=less-arbitrary.md
 PDF=out/${NAME}.pdf
 #TPDF=out/${SRC:.md=_te.pdf}
 HTML=out/${NAME}.html
@@ -38,7 +34,7 @@ offset-array-example.eps: offset-array-example.svg
 #SRC_PLOTS=${wildcard plots/*.gnuplot}
 #IMG_PLOTS=${subst plots/,out/,${SRC_PLOTS:.gnuplot=.svg} } ${PICS}
 IMG_PLOTS=
-BIBLIO=${NAME}.bib
+BIBLIO=towards-better-union.bib
 
 out/%.svg: plots/%.gnuplot plots/%.csv
 	$(GNUPLOT) $< > $@

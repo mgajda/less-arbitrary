@@ -51,7 +51,7 @@ import           Data.Time.ISO8601
 <<missing>>
 ```
 
-```{.haskell file=test/Spec.hs .hidden}
+```{.haskell file=test/spec/Spec.hs .hidden}
 {-# language FlexibleInstances     #-}
 {-# language Rank2Types            #-}
 {-# language MultiParamTypeClasses #-}
@@ -91,7 +91,8 @@ import Test.Validity.Utils(nameOf)
 import qualified GHC.Generics as Generic
 import Test.QuickCheck.Classes
 
-import LessArbitrary
+import Test.Arbitrary
+import Test.LessArbitrary as LessArbitrary
 import Unions
 
 instance Arbitrary Value where
@@ -297,59 +298,9 @@ allSpec :: forall         ty v.
 allSpec = describe (nameOf @ty) $ do
   arbitraryBeyondSpec @ty
   shrinkSpec    @ty
-  --typelikeSpec  @ty
-  --typesSpec     @ty @v
-
-{-
-spec = do
-  putStrLn "Value" $
-    arbitrarySpec @Value
-  quickcheck $ shrinkSpec    @Value
-    --describe "Free types" $ do
-  allSpec @(FreeType Value) @Value
-    arbitrarySpec @(FreeType Value)
-    shrinkSpec    @(FreeType Value)
-    typelikeSpec  @(FreeType Value)
-    typesSpec     @(FreeType Value) @Value
-  allSpec @NullConstraint    @()
-  allSpec @BoolConstraint    @Bool
-  allSpec @StringConstraint  @Text.Text
-  allSpec @IntConstraint     @Int
-  allSpec @NumberConstraint  @Scientific
-  allSpec @RowConstraint     @Array
-  allSpec @ArrayConstraint   @Array
-  allSpec @MappingConstraint @Object
-  allSpec @RecordConstraint  @Object
-  allSpec @ObjectConstraint  @Object
-  allSpec @UnionType         @Value
-  -}
 
 <<typelike-spec>>
 <<types-spec>>
-
-{-
-prop_arbitrary_beyond :: forall ty. Typelike ty => Property
-prop_arbitrary_beyond = do
-  b <- arbitraryBeyond
-  return $ beyond (b :: ty)
- -}
-
-shrinkCheck :: forall    term.
-              (Arbitrary term
-              ,Eq        term)
-            =>           term
-            -> Bool
-shrinkCheck term =
-  term `notElem` shrink term
-
-arbitraryLaws :: forall    ty.
-                (Arbitrary ty
-                ,Show      ty
-                ,Eq        ty)
-              => Proxy     ty
-              -> Laws
-arbitraryLaws (Proxy :: Proxy ty) =
-  Laws "arbitrary" [("does not shrink to itself", property (shrinkCheck :: ty -> Bool))]
 
 typesLaws :: (Typeable  ty
              ,Typeable     term
@@ -389,26 +340,6 @@ main = do
     ,typesLaws (Proxy :: Proxy ObjectConstraint ) (Proxy :: Proxy Object  )
     ,typesLaws (Proxy :: Proxy UnionType        ) (Proxy :: Proxy Value   )
     ]
-{-
-  allSpec @NullConstraint    @()
-  allSpec @BoolConstraint    @Bool
-  allSpec @StringConstraint  @Text.Text
-  allSpec @IntConstraint     @Int
-  allSpec @NumberConstraint  @Scientific
-  allSpec @RowConstraint     @Array
-  allSpec @ArrayConstraint   @Array
-  allSpec @MappingConstraint @Object
-  allSpec @RecordConstraint  @Object
-  allSpec @ObjectConstraint  @Object
-  allSpec @UnionType         @Value
- -}
-
-  
-{-
-return []
-main = $quickcheckAll
- -}
---hspec spec
 ```
 
 # Appendix: package dependencies {.unnumbered}
@@ -454,7 +385,9 @@ library:
 tests:
   spec:
     main: Spec.hs
-    source-dirs: test
+    source-dirs:
+      - test/lib
+      - test/spec
     dependencies:
       - union-types
       - mtl
@@ -462,6 +395,19 @@ tests:
       - transformers
       - hashable
       - quickcheck-classes
+  less-arbitrary:
+    main: LessArbitrary.hs
+    source-dirs:
+      - test/lib
+      - test/less
+    dependencies:
+      - union-types
+      - mtl
+      - random
+      - transformers
+      - hashable
+      - quickcheck-classes
+      - quickcheck-instances
 ```
 
 # Appendix: Hindley-Milner as `Typelike` {.unnumbered}
@@ -509,281 +455,3 @@ isValidEmail = Text.Email.Validate.isValid
            . Text.encodeUtf8
 ```
 
-# Appendix: Less arbitrary wait time
-
-
-```{.haskell file=test/LessArbitrary.hs}
-{-# language DefaultSignatures     #-}
-{-# language FlexibleInstances     #-}
-{-# language FlexibleContexts      #-}
-{-# language GeneralizedNewtypeDeriving #-}
-{-# language Rank2Types            #-}
-{-# language MultiParamTypeClasses #-}
-{-# language ScopedTypeVariables   #-}
-{-# language StandaloneDeriving    #-}
-{-# language TypeOperators         #-}
-{-# language TypeFamilies          #-}
-{-# language TypeApplications      #-}
-{-# language TupleSections         #-}
-{-# language UndecidableInstances  #-}
-{-# language AllowAmbiguousTypes   #-}
-{-# language DataKinds             #-}
-{-# language KindSignatures        #-}
-module LessArbitrary(
-    LessArbitrary(..)
-  , oneof
-  , CostGen(..)
-  , (<$$$>)
-  , (<$$$?>)
-  , currentBudget
-  , fasterArbitrary
-  , genericLessArbitrary
-  , genericLessArbitraryMonoid
-  , flatLessArbitrary
-  , spend
-  ) where
-
-import qualified Data.HashMap.Strict as Map
-import qualified Data.Set            as Set
-import qualified Data.Vector         as Vector
-import qualified Data.Text           as Text
-import qualified Data.Text.Encoding  as Text
-import Control.Monad(replicateM)
-import Data.Scientific
-import Data.Aeson
-import Data.Proxy
-import Data.Typeable
-import Test.Hspec
-import Test.Hspec.QuickCheck
-import qualified Test.QuickCheck as QC
-import qualified Test.QuickCheck.Gen as QC
-import Test.Hspec
-import Test.Hspec.QuickCheck
---import Test.QuickCheck.Arbitrary.Generic
-import Test.Validity hiding(check)
-import Test.Validity.Monoid
-import Test.Validity.Shrinking
-import Test.Validity.Utils(nameOf)
-import qualified Control.Monad.State.Strict as State
-import Control.Monad.Trans.Class
-import System.Random(Random)
-import Control.Applicative
-import Data.Proxy
-import GHC.Generics as G
-import GHC.TypeLits
-import qualified Test.QuickCheck as QC
-import qualified Test.QuickCheck.Arbitrary as QC
-import Data.Hashable
-
-newtype Cost = Cost { unCost :: Int }
-  deriving (Eq,Ord,Enum,Bounded,Num)
-
-newtype CostGen                               a =
-        CostGen {
-          runCostGen :: State.StateT Cost QC.Gen a }
-  deriving (Functor, Applicative, Monad, State.MonadFix)
-
--- Mark a costly constructor with this instead of `<$>`
-(<$$$>) :: (a -> b) -> CostGen a -> CostGen b
-costlyConstructor <$$$> arg = do
-  spend 1
-  costlyConstructor <$> arg
-
-spend :: Cost -> CostGen ()
-spend c = CostGen $ State.modify (-c+)
-
-oneof   :: [CostGen a] -> CostGen a
-oneof [] = error "LessArbitrary.oneof used with empty list"
-oneof gs = choose (0,length gs - 1) >>= (gs !!)
-
-elements :: [a] -> CostGen a
-elements gs = (gs!!) <$> choose (0,length gs - 1)
-
-choose      :: Random  a
-            =>        (a, a)
-            -> CostGen a
-choose (a,b) = CostGen $ lift $ QC.choose (a, b)
-
-(<$$$?>) :: CostGen a -> CostGen a -> CostGen a
-cheapVariants <$$$?> costlyVariants = do
-  budget <- CostGen State.get
-  if budget > (0 :: Cost)
-     then costlyVariants
-     else cheapVariants
-
-currentBudget :: CostGen Cost
-currentBudget = CostGen State.get
-
--- | Chooses one of the given generators, with a weighted random distribution.
--- The input list must be non-empty.
-frequency :: [(Int, CostGen a)] -> CostGen a
-frequency [] = error "LessArbitrary.frequency used with empty list"
-frequency xs
-  | any (< 0) (map fst xs) =
-    error "LessArbitrary.frequency: negative weight"
-  | all (== 0) (map fst xs) =
-    error "LessArbitrary.frequency: all weights were zero"
-frequency xs0 = choose (1, tot) >>= (`pick` xs0)
- where
-  tot = sum (map fst xs0)
-
-  pick n ((k,x):xs)
-    | n <= k    = x
-    | otherwise = pick (n-k) xs
-  pick _ _  = error "LessArbitrary.pick used with empty list"
-
-costFrequency :: [(Int, CostGen a)] -> CostGen a
-costFrequency [] = error "LessArbitrary.costFrequency used with empty list"
-costFrequency xs = do
-  budget <- currentBudget
-  if budget>0
-    then frequency                  xs
-    else frequency
-       $ filter ((minFreq==) . fst) xs
-  where
-    minFreq = minimum $ map fst xs
-
-
-withCost :: Int -> CostGen a -> QC.Gen a
-withCost cost gen = runCostGen gen
-  `State.evalStateT` Cost cost
-
-defaultCost :: Int
-defaultCost  = 100
-
-{-
-instance LessArbitrary a
-      => QC.Arbitrary  a where
-  arbitrary = withCost defaultCost $ lessArbitrary
-  -}
-
-class LessArbitrary a where
-  lessArbitrary :: CostGen a
-  default lessArbitrary :: (Generic a, CGArbitrary (Rep a)) => CostGen a
-  lessArbitrary = to <$> cgArbitrary
-  
-class CGArbitrary a where
-  cgArbitrary :: CostGen (a x)
-
-instance CGArbitrary G.U1 where
-  cgArbitrary = pure G.U1
-
-instance LessArbitrary       c
-      => CGArbitrary (G.K1 i c) where
-  cgArbitrary = G.K1 <$> lessArbitrary
-
-instance CGArbitrary f
-      => CGArbitrary (G.M1 i c f) where
-  cgArbitrary = G.M1 <$> cgArbitrary
-
-instance (CGArbitrary a, CGArbitrary b) => CGArbitrary (a G.:*: b) where
-  cgArbitrary = liftA2 (G.:*:) cgArbitrary cgArbitrary
-
--- | Calculates count of constructors encoded by particular ':+:'.
--- Internal use only.
-type family SumLen a :: Nat where
-  SumLen (a G.:+: b) = (SumLen a) + (SumLen b)
-  --SumLen (a G.:*: b) = (SumLen a) + (SumLen b)
-  SumLen  a          =  1
-
-type family ConsCost a :: Nat where
-  ConsCost (a G.:*: b) =     (ConsCost a) + (ConsCost b)
-  ConsCost (a G.:+: b) = Min (ConsCost a) (ConsCost b)
-  ConsCost  a          = 1
-
-instance (CGArbitrary      a,  CGArbitrary      b,
-          KnownNat (SumLen a), KnownNat (SumLen b)
-         ) => CGArbitrary (a G.:+:              b) where
-  cgArbitrary = costFrequency
-    [ (lfreq, G.L1 <$$$> cgArbitrary)
-    , (rfreq, G.R1 <$$$> cgArbitrary) ]
-    where
-      lfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen a))
-      rfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen b))
-
-fasterArbitrary :: LessArbitrary a => QC.Gen a
-fasterArbitrary = sizedCost lessArbitrary
-
-genericLessArbitrary :: (Generic a, CGArbitrary (Rep a)) => CostGen a
-genericLessArbitrary = to <$> cgArbitrary
-
-genericLessArbitraryMonoid :: (Generic          a
-                              ,CGArbitrary (Rep a)
-                              ,Monoid           a)
-                           =>  CostGen          a
-genericLessArbitraryMonoid  =
-  pure mempty <$$$?> genericLessArbitrary
-
-type family Min m n where
-  Min m n = Min_ m n (CmpNat m n)
-
-type family Min_ (m::Nat) (n::Nat) (o::Ordering) where 
-  Min_ m n 'LT = m
-  Min_ m n 'EQ = m
-  Min_ m n 'GT = n
-
-instance LessArbitrary Bool where
-  lessArbitrary = flatLessArbitrary
-
-instance LessArbitrary Int where
-  lessArbitrary = flatLessArbitrary
-
-instance LessArbitrary Integer where
-  lessArbitrary = flatLessArbitrary
-
-instance LessArbitrary Double where
-  lessArbitrary = flatLessArbitrary
-
-instance LessArbitrary Char where
-  lessArbitrary = flatLessArbitrary
-
-instance (LessArbitrary k
-         ,LessArbitrary   v)
-      => LessArbitrary (k,v) where
-
-instance (LessArbitrary          k
-         ,Ord                    k)
-      =>  LessArbitrary (Set.Set k) where
-  lessArbitrary = Set.fromList <$> lessArbitrary
-
-instance (LessArbitrary              k
-         ,Eq                         k
-         ,Ord                        k
-         ,Hashable                   k 
-         ,LessArbitrary                v)
-      =>  LessArbitrary (Map.HashMap k v) where
-  lessArbitrary =  Map.fromList
-               <$> lessArbitrary
-
-instance LessArbitrary  a
-      => LessArbitrary [a] where
-  lessArbitrary = pure [] <$$$?> do
-    len  <- choose (1,100) -- FIXME: use sized
-    spend $ Cost len
-    replicateM   len lessArbitrary
-
-instance LessArbitrary Scientific where
-  lessArbitrary =
-    scientific <$> lessArbitrary
-               <*> lessArbitrary
-
-flatLessArbitrary :: QC.Arbitrary a
-              => CostGen a
-flatLessArbitrary  = CostGen $ lift QC.arbitrary
-
-instance LessArbitrary                a
-      => LessArbitrary (Vector.Vector a) where
-  lessArbitrary = Vector.fromList <$> lessArbitrary
-
-sizedCost :: CostGen a -> QC.Gen a
-sizedCost gen = QC.sized $ (`withCost` gen)
-
-instance QC.Testable          a
-      => QC.Testable (CostGen a) where
-  property = QC.property
-           . sizedCost
-
-forAll gen prop = do
-  gen >>= prop
-
-```

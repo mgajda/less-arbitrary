@@ -1,4 +1,4 @@
-## ------ language="YAML" file="package.yaml" project://appendices.md#417
+## ------ language="YAML" file="package.yaml" project://appendices.md#348
 
 name: union-types
 version: '0.1.0.0'
@@ -40,7 +40,9 @@ library:
 tests:
   spec:
     main: Spec.hs
-    source-dirs: test
+    source-dirs:
+      - test/lib
+      - test/spec
     dependencies:
       - union-types
       - mtl
@@ -48,4 +50,17 @@ tests:
       - transformers
       - hashable
       - quickcheck-classes
+  less-arbitrary:
+    main: LessArbitrary.hs
+    source-dirs:
+      - test/lib
+      - test/less
+    dependencies:
+      - union-types
+      - mtl
+      - random
+      - transformers
+      - hashable
+      - quickcheck-classes
+      - quickcheck-instances
 ## ------ end
