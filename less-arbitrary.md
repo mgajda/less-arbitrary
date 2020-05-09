@@ -450,8 +450,8 @@ instance (CGArbitrary      a,  CGArbitrary      b,
   cgArbitrary = do
     spend 1
     costFrequency
-    [ (lfreq, G.L1 <$> cgArbitrary)
-    , (rfreq, G.R1 <$> cgArbitrary) ]
+      [ (lfreq, G.L1 <$> cgArbitrary)
+      , (rfreq, G.R1 <$> cgArbitrary) ]
     where
       lfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen a))
       rfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen b))
