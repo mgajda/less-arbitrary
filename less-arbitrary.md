@@ -270,6 +270,7 @@ type instance Rep (Tree a) =
 ```
 
 For simple datatypes, we are only interested in three constructors:
+
 * `:+:` encode choice between constructors
 * `:*:` encode a sequence of constructor parameters
 * `M1`  encode metainformation about the named constructors, `C1`, `S1` and `D1` are actually
@@ -441,13 +442,16 @@ instance (CGArbitrary a, CGArbitrary b) => CGArbitrary (a G.:*: b) where
 ```
 
 But we will need to make a choice on which constructor to use:
+
 ```{.haskell #generic-less-arbitrary}
 instance (CGArbitrary      a,  CGArbitrary      b,
           KnownNat (SumLen a), KnownNat (SumLen b)
          ) => CGArbitrary (a G.:+:              b) where
-  cgArbitrary = costFrequency
-    [ (lfreq, G.L1 <$$$> cgArbitrary)
-    , (rfreq, G.R1 <$$$> cgArbitrary) ]
+  cgArbitrary = do
+    spend 1
+    costFrequency
+    [ (lfreq, G.L1 <$> cgArbitrary)
+    , (rfreq, G.R1 <$> cgArbitrary) ]
     where
       lfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen a))
       rfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen b))
@@ -523,7 +527,6 @@ import qualified Test.QuickCheck as QC
 import qualified Test.QuickCheck.Gen as QC
 import Test.Hspec
 import Test.Hspec.QuickCheck
---import Test.QuickCheck.Arbitrary.Generic
 import Test.Validity hiding(check)
 import Test.Validity.Monoid
 import Test.Validity.Shrinking
@@ -548,6 +551,7 @@ costlyConstructor <$$$> arg = do
   costlyConstructor <$> arg
 
 <<spend>>
+
 <<budget>>
 
 
@@ -558,6 +562,7 @@ withCost cost gen = runCostGen gen
 <<generic-less-arbitrary>>
 
 <<less-arbitrary-class>>
+
 instance LessArbitrary Bool where
   lessArbitrary = flatLessArbitrary
 
@@ -612,7 +617,7 @@ instance LessArbitrary                a
 
 # Appendix: lifting classic `Arbitrary` functions
 
-```{.haskell #lifting-arbitrary}
+```{.haskell #lifting-arbitrary file=lifting.hs}
 
 instance QC.Testable          a
       => QC.Testable (CostGen a) where
@@ -734,3 +739,49 @@ arbitraryLaws (Proxy :: Proxy ty) =
 
 # Appendix: test suite
 
+```{.haskell file=test/less/LessArbitrary.hs}
+{-# language FlexibleInstances     #-}
+{-# language Rank2Types            #-}
+{-# language MultiParamTypeClasses #-}
+{-# language NamedFieldPuns        #-}
+{-# language ScopedTypeVariables   #-}
+{-# language StandaloneDeriving    #-}
+{-# language TypeOperators         #-}
+{-# language TypeApplications      #-}
+{-# language TupleSections         #-}
+{-# language UndecidableInstances  #-}
+{-# language AllowAmbiguousTypes   #-}
+module Main where
+
+import qualified Data.HashMap.Strict as Map
+import qualified Data.Set            as Set
+import qualified Data.Vector         as Vector
+import qualified Data.Text           as Text
+import qualified Data.Text.Encoding  as Text
+import Control.Monad(replicateM)
+import Data.Scientific
+import Data.Aeson
+import Data.Proxy
+import Data.Typeable
+import Data.Hashable
+import Test.Hspec
+import Test.Hspec.QuickCheck
+import Test.QuickCheck
+import Test.QuickCheck.Gen
+import Test.Hspec
+import Test.Hspec.QuickCheck
+import Test.QuickCheck
+import Test.QuickCheck.Arbitrary.Generic
+import Test.Validity hiding(check)
+import Test.Validity.Monoid
+import Test.Validity.Shrinking.Property
+import Test.Validity.Utils(nameOf)
+import qualified GHC.Generics as Generic
+import Test.QuickCheck.Classes
+
+import Test.Arbitrary
+
+<<tree-type>>
+
+main = lawsCheckMany [("Tree", [arbitraryLaws (Proxy :: Proxy (Tree Int))])]
+```
