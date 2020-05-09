@@ -139,7 +139,7 @@ Now let's give some motivating examples from realm of JSON API types:
 {"error"  : "Authorization failed",
    "code" : 401}
 ```
-```{.json file=test/example1a.result .hidden}
+```{.haskell file=test/example1a.result .hidden}
 newtype Example = Example Email
 ```
   * _Page size determines number of results to return (min: 10, max:10000)_ - this is also a subset of `Int` values between `10`, and `10000`
@@ -149,14 +149,14 @@ newtype Example = Example Email
   10000
 ]}
 ```
-```{.json file=test/example1b.result .hidden}
+```{.haskell file=test/example1b.result .hidden}
 newtype Example = Example [Int]
 ```
   * _`date` contains ISO8601 date_ -- contains a `String` in format `"2019-03-03"` but not `String` in format `"The third day of the month of March, Anno Domini 2019"`
 ```{.json file=test/example1c.json .hidden}
 "2019-03-03"
 ```
-```{.json file=test/example1c.result .hidden}
+```{.haskell file=test/example1c.result .hidden}
 newtype Example = Example Date
 ```
 2. Optional fields:
