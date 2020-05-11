@@ -186,10 +186,10 @@ class LessArbitrary a where
 ```
 
 ```{.haskell #less-arbitrary-class .hidden}
-  default lessArbitrary :: (Generic            a
-                           ,LessArbitrary (Rep b a))
-                        =>  CostGen            a
-  lessArbitrary = to <$> lessArbitrary
+  default lessArbitrary :: (Generic             a
+                           ,GLessArbitrary (Rep a))
+                        =>  CostGen             a
+  lessArbitrary = genericLessArbitrary
 ```
 
 Then we can use them as implementation of `arbitrary`
@@ -206,12 +206,15 @@ sizedCost gen = QC.sized $ (`withCost` gen)
 Then we can implement `Arbitrary` instances simply with:
 
 ```{.haskell}
-instance Arbitrary where
+instance _
+      => Arbitrary a where
   arbitrary = fasterArbitrary
 ```
+
 Of course we still need to define `LessArbitrary`,
 but after seeing how simple was a `Generic` defintion `Arbitrary`
 we have a hope that our implementation will be:
+
 
 ```{.haskell}
 instance LessArbitrary where
@@ -268,9 +271,10 @@ type instance Rep (Tree a) =
               (S1
                  ('MetaSel
                     'Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy)
-                 (Rec0 [Tree a])))
-       w
+                    (Rec0 [Tree a])))
+                     ignored
 ```
+7. Note that `Rep`resentation type constructors have additional parameter that is not relevant for our use case.
 
 For simple datatypes, we are only interested in three constructors:
 
@@ -355,7 +359,7 @@ instance (Arbitrary        a
 Excellent piece of work, but non-terminating for recursive types
 with average branching factor greater than 1 (and non-lazy tests, like checking `Eq` reflexivity.)
 
-## Generic implementation
+## Implementing with Generics
 
 It is apparent from our previous considerations,
 that we can reuse code from the existing generic
@@ -363,10 +367,28 @@ implementation when the budget is positive.
 We just need to spend a dollar for
 each constructor we encounter.
 
+For the `Monoid` the implementation would be trivial:
+```{.haskell #generic-less-arbitrary}
+genericLessArbitraryMonoid :: (Generic             a
+                              ,GLessArbitrary (Rep a)
+                              ,Monoid              a )
+                           =>  CostGen             a
+genericLessArbitraryMonoid  =
+  pure mempty <$$$?> genericLessArbitrary
+```
+
+However we want to have fully generic implementation
+that chooses the cheapest constructor even though the
+datatype does not have monoid instance.
+
+### Helpful type family
+
 First we need to compute minimum cost of the in each
 branch of the type representation.
+Instead of calling it _minimum cost_, we call this function `Cheapness`.
 
 For this we need to implement minimum function at the type level:
+
 ```{.haskell #generic-instances}
 type family Min m n where
   Min m n = ChooseGreater (CmpNat m n) m n
@@ -387,7 +409,8 @@ type family Cheapness a :: Nat where
 ```
 
 Since we are only interested in recursive types that can potentially blow out
-our budget, we can also add cases for flat types to prevent them from increasing cost:
+our budget, we can also add cases for flat types since they seem the cheapest:
+
 ```{.haskell #flat-types}
 Cheapness (S1 a (Rec0 Int       )) = 0
 Cheapness (S1 a (Rec0 Scientific)) = 0
@@ -395,17 +418,36 @@ Cheapness (S1 a (Rec0 Double    )) = 0
 Cheapness (S1 a (Rec0 Bool      )) = 0
 Cheapness (S1 a (Rec0 Text.Text )) = 0
 ```
+
+### Skipping over metadata
+
 First we safely ignore metadata by writing an instance:
+
 ```{.haskell #generic-instances}
-instance LessArbitrary              rep
-      => LessArbitrary (D1 metadata rep w) where
-  lessArbitrary = lessArbitrary
+instance GLessArbitrary           f
+      => GLessArbitrary (G.M1 i c f) where
+  gLessArbitrary = G.M1 <$> gLessArbitrary
 ```
 
-However, when the budget is low,
+### Generation on budget
+
+When the budget is low,
 we need to find the least costly constructor each time.
 
-To this end we need to use a type family that computes a cost of a generic implementation:
+We implement it as a type class `GLessArbitrary` that
+is implemented for parts of the `Generic` `Rep`resentation type:
+
+```{.haskell #generic-less-arbitrary}
+class GLessArbitrary datatype where
+  gLessArbitrary :: CostGen (datatype p)
+
+genericLessArbitrary :: (Generic             a
+                        ,GLessArbitrary (Rep a))
+                     =>  CostGen             a
+genericLessArbitrary = to <$> gLessArbitrary
+```
+
+We need to use a type family that computes a cost of a generic implementation:
 
 ```{.haskell #generic-less-arbitrary}
 -- | Calculates count of constructors encoded by particular ':+:'.
@@ -421,62 +463,50 @@ type family ConsCost a :: Nat where
   ConsCost  a          = 1
 ``` 
 
-First we will recursively descent down the constructors that
-are not relevant for the problem:
+Naturally, `GLessArbitrary` for unit type has only one result:
 
 ```{.haskell #generic-less-arbitrary}
-instance LessArbitrary G.U1 where
-  lessArbitrary = pure G.U1
+instance GLessArbitrary G.U1 where
+  gLessArbitrary = pure G.U1
+```
 
-instance LessArbitrary         c
-      => LessArbitrary (G.K1 i c) where
-  lessArbitrary = G.K1 <$> lessArbitrary
+We descend down the product of to reach each field,
+and then assemble the result:
 
-instance LessArbitrary           f
-      => LessArbitrary (G.M1 i c f) where
-  lessArbitrary = G.M1 <$> lessArbitrary
+```{.haskell #generic-less-arbitrary}
+instance (GLessArbitrary  a
+         ,GLessArbitrary          b)
+      =>  GLessArbitrary (a G.:*: b) where
+  gLessArbitrary = (G.:*:) <$> gLessArbitrary <*> gLessArbitrary
+```
 
-instance (LessArbitrary  a
-         ,LessArbitrary          b)
-      =>  LessArbitrary (a G.:*: b) where
-  lessArbitrary = (G.:*:) <$> lessArbitrary <*> lessArbitrary
+We recursively call instances of `LessArbitrary` for the types of fields:
+
+```{.haskell #generic-less-arbitrary}
+instance  LessArbitrary         c
+      => GLessArbitrary (G.K1 i c) where
+  gLessArbitrary = G.K1 <$> lessArbitrary
 ```
 
 But we will need to make a choice on which constructor to use:
 
 ```{.haskell #generic-less-arbitrary}
-instance (LessArbitrary    a
-         ,LessArbitrary            b
+instance (GLessArbitrary   a
+         ,GLessArbitrary                 b
          ,KnownNat (SumLen a)
-         ,KnownNat (SumLen         b)
+         ,KnownNat (SumLen               b)
          )
-      =>  LessArbitrary   (a Generic.:+: b) where
-  lessArbitrary = do
+      => GLessArbitrary   (a Generic.:+: b) where
+  gLessArbitrary = do
     spend 1
     costFrequency
-      [ (lfreq, L1 <$> lessArbitrary)
-      , (rfreq, R1 <$> lessArbitrary) ]
+      [ (lfreq, L1 <$> gLessArbitrary)
+      , (rfreq, R1 <$> gLessArbitrary) ]
     where
       lfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen a))
       rfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen b))
 ```
 
-
-```{.haskell #generic-less-arbitrary}
-genericLessArbitrary :: (Generic            a
-                        ,LessArbitrary (Rep a))
-                     =>  CostGen            a
-genericLessArbitrary = to <$> cgArbitrary
-
-genericLessArbitraryMonoid :: (Generic            a
-                              ,LessArbitrary (Rep a)
-                              ,Monoid             a)
-                           =>  CostGen          a
-genericLessArbitraryMonoid  =
-  pure mempty <$$$?> genericLessArbitrary
-
-
-```
 
 # Bibliography
 
@@ -492,6 +522,7 @@ genericLessArbitraryMonoid  =
 {-# language FlexibleContexts      #-}
 {-# language GeneralizedNewtypeDeriving #-}
 {-# language Rank2Types            #-}
+{-# language PolyKinds             #-}
 {-# language MultiParamTypeClasses #-}
 {-# language ScopedTypeVariables   #-}
 {-# language StandaloneDeriving    #-}
