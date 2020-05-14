@@ -145,7 +145,7 @@ and thus avoid limiting the depth of generated data structures,
 and ignoring estimation of branching factor altogether.
 
 ```{.haskell #costgen}
-newtype Cost = Cost { unCost :: Int }
+newtype Cost = Cost Int 
   deriving (Eq,Ord,Enum,Bounded,Num)
 
 newtype CostGen                               a =
@@ -177,6 +177,7 @@ cheapVariants $$$? costlyVariants = do
 ```
 
 ```{.haskell #budget .hidden}
+(<$$$?>) :: CostGen a -> CostGen a -> CostGen a
 (<$$$?>) = ($$$?)
 ```
 
@@ -203,7 +204,7 @@ fasterArbitrary :: LessArbitrary a => QC.Gen a
 fasterArbitrary = sizedCost lessArbitrary
 
 sizedCost :: CostGen a -> QC.Gen a
-sizedCost gen = QC.sized $ (`withCost` gen)
+sizedCost gen = QC.sized (`withCost` gen)
 ```
 
 Then we can implement `Arbitrary` instances simply with:
@@ -431,8 +432,9 @@ type family Cheapness a :: Nat where
   Cheapness (a :*: b)  =      Cheapness a + Cheapness b
   Cheapness (a :+: b)  = Min (Cheapness a) (Cheapness b)
   Cheapness  U1                      = 0
-  Cheapness (M1 a b c) = Cheapness c
   <<flat-types>>
+  Cheapness (K1 a  other           ) = 1
+  Cheapness (C1 a  other           ) = 1
 ```
 
 Since we are only interested in recursive types that can potentially blow out
@@ -444,8 +446,7 @@ Cheapness (S1 a (Rec0 Scientific)) = 0
 Cheapness (S1 a (Rec0 Double    )) = 0
 Cheapness (S1 a (Rec0 Bool      )) = 0
 Cheapness (S1 a (Rec0 Text.Text )) = 0
-Cheapness (S1 a  other           ) = 1
-Cheapness (K1 a  other           ) = 1
+Cheapness (S1 a (Rec0 other     )) = 1
 ```
 
 ### Base case for each datatype
@@ -490,8 +491,8 @@ generate each constructor with the same frequency:
 
 ```{.haskell #generic-less-arbitrary}
 type family SumLen a :: Nat where
-  SumLen (a G.:+: b) = (SumLen a) + (SumLen b)
-  SumLen  a          =  1
+  SumLen (a G.:+: b) = SumLen a + SumLen b
+  SumLen  a          = 1
 ```
 
 ### Base cases for `GLessArbitrary`
@@ -540,18 +541,19 @@ instance (GLessArbitrary      a
          ,KnownNat (Cheapness               b)
          )
       => GLessArbitrary      (a Generic.:+: b) where
-  gLessArbitrary = do
+  gLessArbitrary =
     costFrequency
       [ (lfreq, L1 <$> gLessArbitrary)
       , (rfreq, R1 <$> gLessArbitrary) ]
     where
       lfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen a))
       rfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen b))
-  cheapest = do
-      if lcheap<=rcheap
+  cheapest =
+      if lcheap <= rcheap
          then L1 <$> cheapest
          else R1 <$> cheapest
     where
+      lcheap, rcheap :: Int
       lcheap = fromIntegral $ natVal (Proxy :: Proxy (Cheapness a))
       rcheap = fromIntegral $ natVal (Proxy :: Proxy (Cheapness b))
 ```
@@ -574,15 +576,11 @@ instance (GLessArbitrary      a
 {-# language PolyKinds             #-}
 {-# language MultiParamTypeClasses #-}
 {-# language ScopedTypeVariables   #-}
-{-# language StandaloneDeriving    #-}
 {-# language TypeOperators         #-}
 {-# language TypeFamilies          #-}
-{-# language TypeApplications      #-}
-{-# language TupleSections         #-}
 {-# language UndecidableInstances  #-}
 {-# language AllowAmbiguousTypes   #-}
 {-# language DataKinds             #-}
-{-# language KindSignatures        #-}
 module Test.LessArbitrary(
     LessArbitrary(..)
   , oneof
@@ -595,38 +593,25 @@ module Test.LessArbitrary(
   , genericLessArbitraryMonoid
   , flatLessArbitrary
   , spend
+  , elements
+  , forAll
   ) where
 
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Set            as Set
 import qualified Data.Vector         as Vector
 import qualified Data.Text           as Text
-import qualified Data.Text.Encoding  as Text
 import Control.Monad(replicateM)
 import Data.Scientific
-import Data.Aeson
 import Data.Proxy
-import Data.Typeable
-import Test.Hspec
-import Test.Hspec.QuickCheck
-import qualified Test.QuickCheck as QC
 import qualified Test.QuickCheck.Gen as QC
-import Test.Hspec
-import Test.Hspec.QuickCheck
-import Test.Validity hiding(check)
-import Test.Validity.Monoid
-import Test.Validity.Shrinking
-import Test.Validity.Utils(nameOf)
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans.Class
 import System.Random(Random)
-import Control.Applicative
-import Data.Proxy
 import GHC.Generics as G
 import GHC.Generics as Generic
 import GHC.TypeLits
 import qualified Test.QuickCheck as QC
-import qualified Test.QuickCheck.Arbitrary as QC
 import Data.Hashable
 
 <<costgen>>
@@ -706,15 +691,15 @@ instance LessArbitrary                a
 
 # Appendix: lifting classic `Arbitrary` functions
 
-```{.haskell #lifting-arbitrary file=lifting.hs}
+```{.haskell #lifting-arbitrary}
 
 instance QC.Testable          a
       => QC.Testable (CostGen a) where
   property = QC.property
            . sizedCost
 
-forAll gen prop = do
-  gen >>= prop
+forAll :: CostGen a -> (a -> CostGen b) -> CostGen b
+forAll gen prop = gen >>= prop
 
 instance LessArbitrary  a
       => LessArbitrary [a] where
@@ -773,40 +758,14 @@ costFrequency xs = do
 {-# language FlexibleInstances     #-}
 {-# language Rank2Types            #-}
 {-# language MultiParamTypeClasses #-}
-{-# language NamedFieldPuns        #-}
 {-# language ScopedTypeVariables   #-}
-{-# language StandaloneDeriving    #-}
 {-# language TypeOperators         #-}
-{-# language TypeApplications      #-}
-{-# language TupleSections         #-}
 {-# language UndecidableInstances  #-}
 {-# language AllowAmbiguousTypes   #-}
 module Test.Arbitrary where
 
-import qualified Data.HashMap.Strict as Map
-import qualified Data.Set            as Set
-import qualified Data.Vector         as Vector
-import qualified Data.Text           as Text
-import qualified Data.Text.Encoding  as Text
-import Control.Monad(replicateM)
-import Data.Scientific
-import Data.Aeson
 import Data.Proxy
-import Data.Typeable
-import Data.Hashable
-import Test.Hspec
-import Test.Hspec.QuickCheck
 import Test.QuickCheck
-import Test.QuickCheck.Gen
-import Test.Hspec
-import Test.Hspec.QuickCheck
-import Test.QuickCheck
-import Test.QuickCheck.Arbitrary.Generic
-import Test.Validity hiding(check)
-import Test.Validity.Monoid
-import Test.Validity.Shrinking.Property
-import Test.Validity.Utils(nameOf)
-import qualified GHC.Generics as Generic
 import Test.QuickCheck.Classes
 
 shrinkCheck :: forall    term.
@@ -829,103 +788,35 @@ arbitraryLaws (Proxy :: Proxy ty) =
 
 # Appendix: non-terminating test suite
 
+We can compare the tests with `LessArbitrary` (which terminates fast, linear time):
 ```{.haskell file=test/less/LessArbitrary.hs}
-{-# language FlexibleInstances     #-}
-{-# language Rank2Types            #-}
-{-# language MultiParamTypeClasses #-}
-{-# language NamedFieldPuns        #-}
-{-# language ScopedTypeVariables   #-}
-{-# language StandaloneDeriving    #-}
-{-# language TypeOperators         #-}
-{-# language TypeApplications      #-}
-{-# language TupleSections         #-}
-{-# language UndecidableInstances  #-}
-{-# language AllowAmbiguousTypes   #-}
-{-# language DeriveGeneric         #-}
-module Main where
-
-import qualified Data.HashMap.Strict as Map
-import qualified Data.Set            as Set
-import qualified Data.Vector         as Vector
-import qualified Data.Text           as Text
-import qualified Data.Text.Encoding  as Text
-import Control.Monad(replicateM)
-import Data.Scientific
-import Data.Aeson
-import Data.Proxy
-import Data.Typeable
-import Data.Hashable
-import Test.Hspec
-import Test.Hspec.QuickCheck
-import Test.QuickCheck
-import Test.QuickCheck.Gen
-import Test.Hspec
-import Test.Hspec.QuickCheck
-import Test.QuickCheck
-import Test.QuickCheck.Arbitrary.Generic
-import Test.Validity hiding(check)
-import Test.Validity.Monoid
-import Test.Validity.Shrinking.Property
-import Test.Validity.Utils(nameOf)
-import qualified GHC.Generics as Generic
-import Test.QuickCheck.Classes
-
-import Test.LessArbitrary
-import Test.Arbitrary
-
-<<tree-type>>
-
--- This one works great!
-instance LessArbitrary       a
-      => LessArbitrary (Tree a) where
-
-instance LessArbitrary   a
-      => Arbitrary (Tree a) where
-  arbitrary = fasterArbitrary
-
-main = lawsCheckMany [("Tree", [arbitraryLaws (Proxy :: Proxy (Tree Int))
-                               ,eqLaws        (Proxy :: Proxy (Tree Int))
-                               ])]
+<<test-file-header>>
+<<test-less-arbitrary-version>>
+<<test-file-laws>>
 ```
 
-```{.haskell file=test/less/LessArbitrary.hs}
+Or with a generic `Arbitrary` (which naturally hangs):
+```{.haskell file=test/nonterminating/NonterminatingArbitrary.hs}
+<<test-file-header>>
+<<tree-type-typical-arbitrary>>
+<<test-file-laws>>
+```
+
+Here is the code:
+
+```{.haskell #test-file-header}
 {-# language FlexibleInstances     #-}
 {-# language Rank2Types            #-}
 {-# language MultiParamTypeClasses #-}
-{-# language NamedFieldPuns        #-}
 {-# language ScopedTypeVariables   #-}
-{-# language StandaloneDeriving    #-}
 {-# language TypeOperators         #-}
-{-# language TypeApplications      #-}
-{-# language TupleSections         #-}
 {-# language UndecidableInstances  #-}
 {-# language AllowAmbiguousTypes   #-}
 {-# language DeriveGeneric         #-}
 module Main where
 
-import qualified Data.HashMap.Strict as Map
-import qualified Data.Set            as Set
-import qualified Data.Vector         as Vector
-import qualified Data.Text           as Text
-import qualified Data.Text.Encoding  as Text
-import Control.Monad(replicateM)
-import Data.Scientific
-import Data.Aeson
 import Data.Proxy
-import Data.Typeable
-import Data.Hashable
-import Test.Hspec
-import Test.Hspec.QuickCheck
 import Test.QuickCheck
-import Test.QuickCheck.Gen
-import Test.Hspec
-import Test.Hspec.QuickCheck
-import Test.QuickCheck
-import Test.QuickCheck.Arbitrary.Generic
-import Test.Validity hiding(check)
-import Test.Validity.Monoid
-import Test.Validity.Shrinking.Property
-import Test.Validity.Utils(nameOf)
 import qualified GHC.Generics as Generic
 import Test.QuickCheck.Classes
 
@@ -933,15 +824,20 @@ import Test.LessArbitrary
 import Test.Arbitrary
 
 <<tree-type>>
+```
 
--- This one works great!
+
+```{.haskell #test-less-arbitrary-version}
 instance LessArbitrary       a
       => LessArbitrary (Tree a) where
 
 instance LessArbitrary   a
       => Arbitrary (Tree a) where
   arbitrary = fasterArbitrary
+```
 
+```{.haskell #test-file-laws}
+main :: IO ()
 main = lawsCheckMany [("Tree", [arbitraryLaws (Proxy :: Proxy (Tree Int))
                                ,eqLaws        (Proxy :: Proxy (Tree Int))
                                ])]
