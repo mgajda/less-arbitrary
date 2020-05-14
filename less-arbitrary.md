@@ -374,12 +374,35 @@ genericLessArbitraryMonoid :: (Generic             a
                               ,Monoid              a )
                            =>  CostGen             a
 genericLessArbitraryMonoid  =
-  pure mempty <$$$?> genericLessArbitrary
+  pure mempty $$$? genericLessArbitrary
 ```
 
 However we want to have fully generic implementation
 that chooses the cheapest constructor even though the
 datatype does not have monoid instance.
+
+### Classy budget-conscious
+
+When the budget is low,
+we need to find the least costly constructor each time.
+
+So to implement it as a type class `GLessArbitrary` that
+is implemented for parts of the `Generic` `Rep`resentation type,
+we will implement two methods:
+
+1. `gLessArbitrary` is used for normal random data generation
+2. `cheapest` is used when we run out of budget
+
+```{.haskell #generic-less-arbitrary}
+class GLessArbitrary datatype where
+  gLessArbitrary :: CostGen (datatype p)
+  cheapest       :: CostGen (datatype p)
+
+genericLessArbitrary :: (Generic             a
+                        ,GLessArbitrary (Rep a))
+                     =>  CostGen             a
+genericLessArbitrary = G.to <$> gLessArbitrary
+```
 
 ### Helpful type family
 
@@ -391,20 +414,21 @@ For this we need to implement minimum function at the type level:
 
 ```{.haskell #generic-instances}
 type family Min m n where
-  Min m n = ChooseGreater (CmpNat m n) m n
+  Min m n = ChooseSmaller (CmpNat m n) m n
 
-type family ChooseGreater (o::Ordering) (m::Nat) (n::Nat) where 
-  ChooseGreater 'LT m n = m
-  ChooseGreater 'EQ m n = m
-  ChooseGreater 'GT m n = n
+type family ChooseSmaller (o::Ordering) (m::Nat) (n::Nat) where 
+  ChooseSmaller 'LT m n = m
+  ChooseSmaller 'EQ m n = m
+  ChooseSmaller 'GT m n = n
 ```
 
 so we can choose the cheapest^[We could add instances for :
 ```{.haskell #generic-instances}
 type family Cheapness a :: Nat where
-  Cheapness (a :*: b) =      Cheapness a + Cheapness b
-  Cheapness (a :+: b) = Min (Cheapness a) (Cheapness b)
-  Cheapness (S1 a  b) = 1
+  Cheapness (a :*: b)  =      Cheapness a + Cheapness b
+  Cheapness (a :+: b)  = Min (Cheapness a) (Cheapness b)
+  Cheapness  U1                      = 0
+  Cheapness (M1 a b c) = Cheapness c
   <<flat-types>>
 ```
 
@@ -417,60 +441,69 @@ Cheapness (S1 a (Rec0 Scientific)) = 0
 Cheapness (S1 a (Rec0 Double    )) = 0
 Cheapness (S1 a (Rec0 Bool      )) = 0
 Cheapness (S1 a (Rec0 Text.Text )) = 0
+Cheapness (S1 a  other           ) = 1
+Cheapness (K1 a  other           ) = 1
 ```
 
-### Skipping over metadata
+### Base case for each datatype
+
+For each datatype, we first write a skeleton
+code that first spends a coin,
+and then checks whether we have enough
+funds to go on expensive path,
+or we are beyond our allocation
+and need to generate from among the cheapest possible options.
+
+```{.haskell #generic-less-arbitrary}
+instance (GLessArbitrary       f)
+      =>  GLessArbitrary (D1 a f) where 
+  gLessArbitrary = do
+    spend 1
+    M1 <$> (cheapest $$$? gLessArbitrary)
+  cheapest = M1 <$> cheapest
+```
+
+### Skipping over other metadata
 
 First we safely ignore metadata by writing an instance:
 
 ```{.haskell #generic-instances}
 instance GLessArbitrary           f
-      => GLessArbitrary (G.M1 i c f) where
+      => GLessArbitrary (G.C1 c f) where
   gLessArbitrary = G.M1 <$> gLessArbitrary
+  cheapest       = G.M1 <$> cheapest
+
+instance GLessArbitrary           f
+      => GLessArbitrary (G.S1 c f) where
+  gLessArbitrary = G.M1 <$> gLessArbitrary
+  cheapest       = G.M1 <$> cheapest
 ```
 
-### Generation on budget
+### Counting constructors
 
-When the budget is low,
-we need to find the least costly constructor each time.
-
-We implement it as a type class `GLessArbitrary` that
-is implemented for parts of the `Generic` `Rep`resentation type:
+For the usual case, we need to count number of constructors
+in each branch of sum type `:+:` so we can
+generate each constructor with the same frequency:
 
 ```{.haskell #generic-less-arbitrary}
-class GLessArbitrary datatype where
-  gLessArbitrary :: CostGen (datatype p)
-
-genericLessArbitrary :: (Generic             a
-                        ,GLessArbitrary (Rep a))
-                     =>  CostGen             a
-genericLessArbitrary = to <$> gLessArbitrary
-```
-
-We need to use a type family that computes a cost of a generic implementation:
-
-```{.haskell #generic-less-arbitrary}
--- | Calculates count of constructors encoded by particular ':+:'.
--- Internal use only.
 type family SumLen a :: Nat where
   SumLen (a G.:+: b) = (SumLen a) + (SumLen b)
-  --SumLen (a G.:*: b) = (SumLen a) + (SumLen b)
   SumLen  a          =  1
+```
 
-type family ConsCost a :: Nat where
-  ConsCost (a G.:*: b) =     (ConsCost a) + (ConsCost b)
-  ConsCost (a G.:+: b) = Min (ConsCost a) (ConsCost b)
-  ConsCost  a          = 1
-``` 
+### Base cases for `GLessArbitrary`
 
-Naturally, `GLessArbitrary` for unit type has only one result:
+Now we are ready to define the instances of `GLessArbitrary` class.
+
+We start with base cases `GLessArbitrary` for types with the same representation as unit type has only one result:
 
 ```{.haskell #generic-less-arbitrary}
 instance GLessArbitrary G.U1 where
   gLessArbitrary = pure G.U1
+  cheapest       = pure G.U1
 ```
 
-We descend down the product of to reach each field,
+For the product of, we descend down the product of to reach each field,
 and then assemble the result:
 
 ```{.haskell #generic-less-arbitrary}
@@ -478,6 +511,7 @@ instance (GLessArbitrary  a
          ,GLessArbitrary          b)
       =>  GLessArbitrary (a G.:*: b) where
   gLessArbitrary = (G.:*:) <$> gLessArbitrary <*> gLessArbitrary
+  cheapest       = (G.:*:) <$> cheapest       <*> cheapest
 ```
 
 We recursively call instances of `LessArbitrary` for the types of fields:
@@ -486,25 +520,37 @@ We recursively call instances of `LessArbitrary` for the types of fields:
 instance  LessArbitrary         c
       => GLessArbitrary (G.K1 i c) where
   gLessArbitrary = G.K1 <$> lessArbitrary
+  cheapest       = G.K1 <$> lessArbitrary
 ```
 
-But we will need to make a choice on which constructor to use:
+### Selecting the constructor
+
+We use code for selecting the constructor that
+is taken after[@generic-arbitrary].
 
 ```{.haskell #generic-less-arbitrary}
-instance (GLessArbitrary   a
-         ,GLessArbitrary                 b
-         ,KnownNat (SumLen a)
-         ,KnownNat (SumLen               b)
+instance (GLessArbitrary      a
+         ,GLessArbitrary                    b
+         ,KnownNat (SumLen    a)
+         ,KnownNat (SumLen                  b)
+         ,KnownNat (Cheapness a)
+         ,KnownNat (Cheapness               b)
          )
-      => GLessArbitrary   (a Generic.:+: b) where
+      => GLessArbitrary      (a Generic.:+: b) where
   gLessArbitrary = do
-    spend 1
     costFrequency
       [ (lfreq, L1 <$> gLessArbitrary)
       , (rfreq, R1 <$> gLessArbitrary) ]
     where
       lfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen a))
       rfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen b))
+  cheapest = do
+      if lcheap<=rcheap
+         then L1 <$> cheapest
+         else R1 <$> cheapest
+    where
+      lcheap = fromIntegral $ natVal (Proxy :: Proxy (Cheapness a))
+      rcheap = fromIntegral $ natVal (Proxy :: Proxy (Cheapness b))
 ```
 
 
@@ -825,5 +871,7 @@ import Test.Arbitrary
 
 <<tree-type>>
 
-main = lawsCheckMany [("Tree", [arbitraryLaws (Proxy :: Proxy (Tree Int))])]
+main = lawsCheckMany [("Tree", [arbitraryLaws (Proxy :: Proxy (Tree Int))
+                               --,eqLaws        (Proxy :: Proxy (Tree Int))
+                               ])]
 ```
