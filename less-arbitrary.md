@@ -40,8 +40,10 @@ acks: |
 Property testing is the cheapest and most precise way of building up a test suite for your program.
 Especially if the datatypes enjoy nice mathematical laws.
 But it is also the easiest way to make it run for an unreasonably long time.
-We prove connection between deeply recursive data structures, and epidemic growth rate, and show how to fix the problem.
-After our intervention the Arbitrary instances run in linear time with respect to assumed test size.
+We show that connection between deeply recursive data structures, and epidemic growth rate
+can be easily fixed with a generic implementation.
+After our intervention the Arbitrary instances run in linear time with respect to assumed test size,
+and do not need to be written, just instantiated from our generic program.
 
 # Motivation
 
@@ -56,7 +58,8 @@ data Tree        a =
     Leaf         a
   | Branch [Tree a]
   deriving (Eq,Show,Generic.Generic)
-
+```
+```{.haskell #tree-type-typical-arbitrary}
 instance Arbitrary       a
       => Arbitrary (Tree a) where
   arbitrary = oneof [Leaf   <$> arbitrary
@@ -824,7 +827,7 @@ arbitraryLaws (Proxy :: Proxy ty) =
   Laws "arbitrary" [("does not shrink to itself", property (shrinkCheck :: ty -> Bool))]
 ```
 
-# Appendix: test suite
+# Appendix: non-terminating test suite
 
 ```{.haskell file=test/less/LessArbitrary.hs}
 {-# language FlexibleInstances     #-}
@@ -867,11 +870,79 @@ import Test.Validity.Utils(nameOf)
 import qualified GHC.Generics as Generic
 import Test.QuickCheck.Classes
 
+import Test.LessArbitrary
 import Test.Arbitrary
 
 <<tree-type>>
 
+-- This one works great!
+instance LessArbitrary       a
+      => LessArbitrary (Tree a) where
+
+instance LessArbitrary   a
+      => Arbitrary (Tree a) where
+  arbitrary = fasterArbitrary
+
 main = lawsCheckMany [("Tree", [arbitraryLaws (Proxy :: Proxy (Tree Int))
-                               --,eqLaws        (Proxy :: Proxy (Tree Int))
+                               ,eqLaws        (Proxy :: Proxy (Tree Int))
+                               ])]
+```
+
+```{.haskell file=test/less/LessArbitrary.hs}
+{-# language FlexibleInstances     #-}
+{-# language Rank2Types            #-}
+{-# language MultiParamTypeClasses #-}
+{-# language NamedFieldPuns        #-}
+{-# language ScopedTypeVariables   #-}
+{-# language StandaloneDeriving    #-}
+{-# language TypeOperators         #-}
+{-# language TypeApplications      #-}
+{-# language TupleSections         #-}
+{-# language UndecidableInstances  #-}
+{-# language AllowAmbiguousTypes   #-}
+{-# language DeriveGeneric         #-}
+module Main where
+
+import qualified Data.HashMap.Strict as Map
+import qualified Data.Set            as Set
+import qualified Data.Vector         as Vector
+import qualified Data.Text           as Text
+import qualified Data.Text.Encoding  as Text
+import Control.Monad(replicateM)
+import Data.Scientific
+import Data.Aeson
+import Data.Proxy
+import Data.Typeable
+import Data.Hashable
+import Test.Hspec
+import Test.Hspec.QuickCheck
+import Test.QuickCheck
+import Test.QuickCheck.Gen
+import Test.Hspec
+import Test.Hspec.QuickCheck
+import Test.QuickCheck
+import Test.QuickCheck.Arbitrary.Generic
+import Test.Validity hiding(check)
+import Test.Validity.Monoid
+import Test.Validity.Shrinking.Property
+import Test.Validity.Utils(nameOf)
+import qualified GHC.Generics as Generic
+import Test.QuickCheck.Classes
+
+import Test.LessArbitrary
+import Test.Arbitrary
+
+<<tree-type>>
+
+-- This one works great!
+instance LessArbitrary       a
+      => LessArbitrary (Tree a) where
+
+instance LessArbitrary   a
+      => Arbitrary (Tree a) where
+  arbitrary = fasterArbitrary
+
+main = lawsCheckMany [("Tree", [arbitraryLaws (Proxy :: Proxy (Tree Int))
+                               ,eqLaws        (Proxy :: Proxy (Tree Int))
                                ])]
 ```
