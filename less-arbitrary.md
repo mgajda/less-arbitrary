@@ -586,13 +586,14 @@ module Test.LessArbitrary(
   , oneof
   , CostGen(..)
   , (<$$$>)
-  , (<$$$?>)
+  , ($$$?)
   , currentBudget
   , fasterArbitrary
   , genericLessArbitrary
   , genericLessArbitraryMonoid
   , flatLessArbitrary
   , spend
+  , withCost
   , elements
   , forAll
   ) where
@@ -793,12 +794,30 @@ We can compare the tests with `LessArbitrary` (which terminates fast, linear tim
 <<test-file-header>>
 <<test-less-arbitrary-version>>
 <<test-file-laws>>
+
+otherLaws :: [Laws]
+otherLaws = [lessArbitraryLaws isLeaf]
+  where
+    isLeaf :: Tree Int -> Bool
+    isLeaf (Leaf   _) = True
+    isLeaf (Branch _) = False
+
+lessArbitraryLaws :: LessArbitrary a
+                  => (a -> Bool) -> Laws
+lessArbitraryLaws cheapestPred =
+    Laws "LessArbitrary"
+         [("always selects cheapest", property $ prop_alwaysCheapest cheapestPred)]
+
+prop_alwaysCheapest :: LessArbitrary a
+                    => (a -> Bool) -> Gen Bool
+prop_alwaysCheapest cheapestPred = cheapestPred <$> withCost 0 lessArbitrary
 ```
 
 Or with a generic `Arbitrary` (which naturally hangs):
 ```{.haskell file=test/nonterminating/NonterminatingArbitrary.hs}
 <<test-file-header>>
 <<tree-type-typical-arbitrary>>
+otherLaws = []
 <<test-file-laws>>
 ```
 
@@ -837,8 +856,10 @@ instance LessArbitrary   a
 ```
 
 ```{.haskell #test-file-laws}
+
 main :: IO ()
-main = lawsCheckMany [("Tree", [arbitraryLaws (Proxy :: Proxy (Tree Int))
-                               ,eqLaws        (Proxy :: Proxy (Tree Int))
-                               ])]
+main = do
+  lawsCheckMany [("Tree", [arbitraryLaws (Proxy :: Proxy (Tree Int))
+                          ,eqLaws        (Proxy :: Proxy (Tree Int))
+                          ] <> otherLaws)]
 ```
