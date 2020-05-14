@@ -89,12 +89,12 @@ data NumberConstraint =
   | NCFloat
   deriving(Eq,Show,Generic)
 
-instance Typelike NumberConstraint where
-  beyond = (==NCFloat)
-
 instance Semigroup NumberConstraint where
   <<standard-rules-number-constraint>>
   NCInt <> NCInt = NCInt
+
+instance Typelike NumberConstraint where
+  beyond = (==NCFloat)
 
 instance NumberConstraint `Types` Scientific where
   infer sci
@@ -110,13 +110,13 @@ instance NumberConstraint `Types` Scientific where
 ```{.haskell #standard-rules-number-constraint}
 NCFloat <> _       = NCFloat
 _       <> NCFloat = NCFloat
-NCNever <> _       = NCNever
-_       <> NCNever = NCNever
+NCNever <> a       = a
+a       <> NCNever = a
 ```
 
 ```{.haskell .hidden #standard-instances-number-constraint}
 instance Monoid NumberConstraint where
-  mempty = mempty
+  mempty = NCNever
 ```
 
 ## Free union type
@@ -385,7 +385,7 @@ instance Semigroup   RecordConstraint where
                        (fields b)
 
 instance Monoid      RecordConstraint where
-  mempty = mempty
+  mempty = RCBottom
 
 instance RecordConstraint `Types` Object
   where
@@ -591,8 +591,10 @@ data UnionType =
   , unionBool :: BoolConstraint
   , unionNum  :: NumberConstraint
   , unionStr  :: StringConstraint
-  , unionArr  :: ArrayConstraint
-  , unionObj  :: ObjectConstraint
+  --, unionArr  :: ArrayConstraint
+  , unionArr  :: PresenceConstraint Array --ArrayConstraint
+  , unionObj  :: PresenceConstraint Object --ObjectConstraint
+  --, unionObj  :: ObjectConstraint
   }
   deriving (Eq,Show,Generic)
 

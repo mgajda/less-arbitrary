@@ -99,7 +99,7 @@ instance Arbitrary Value where
   arbitrary = fasterArbitrary
 
 instance LessArbitrary Value where
-  lessArbitrary = cheap <$$$?> genericLessArbitrary
+  lessArbitrary = cheap $$$? genericLessArbitrary
     where
       cheap = LessArbitrary.oneof [
                 pure       Null
@@ -226,7 +226,7 @@ instance Arbitrary     IntConstraint where
   arbitrary = fasterArbitrary
 
 instance LessArbitrary NumberConstraint where
-  lessArbitrary = genericLessArbitraryMonoid
+  lessArbitrary = genericLessArbitrary
 
 instance Arbitrary     NumberConstraint where
   arbitrary = fasterArbitrary
@@ -333,10 +333,10 @@ main = do
     ,typesLaws (Proxy :: Proxy StringConstraint ) (Proxy :: Proxy String)
     ,typesLaws (Proxy :: Proxy BoolConstraint   ) (Proxy :: Proxy Bool)
     ,typesLaws (Proxy :: Proxy NullConstraint   ) (Proxy :: Proxy ()  )
-    ,typesLaws (Proxy :: Proxy RowConstraint    ) (Proxy :: Proxy Array  )
+    ,typesLaws (Proxy :: Proxy RowConstraint    ) (Proxy :: Proxy Array  ) -- Eq loops
     ,typesLaws (Proxy :: Proxy ArrayConstraint  ) (Proxy :: Proxy Array  )
-    ,typesLaws (Proxy :: Proxy MappingConstraint) (Proxy :: Proxy Object  )
-    ,typesLaws (Proxy :: Proxy RecordConstraint ) (Proxy :: Proxy Object  )
+    ,typesLaws (Proxy :: Proxy MappingConstraint) (Proxy :: Proxy Object  ) -- loops
+    ,typesLaws (Proxy :: Proxy RecordConstraint ) (Proxy :: Proxy Object  ) -- loops
     ,typesLaws (Proxy :: Proxy ObjectConstraint ) (Proxy :: Proxy Object  )
     ,typesLaws (Proxy :: Proxy UnionType        ) (Proxy :: Proxy Value   )
     ]
