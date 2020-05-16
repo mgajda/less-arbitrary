@@ -622,7 +622,73 @@ month={Oct},
 day={2},
 publisher={Yesod Web Framework blog}
 }
-@inproceedings{10.1145/1863523.1863529,
+@inproceedings{compilersALaCarte,
+	author = "Laurence E. Day and Graham Hutton",
+	title = "{Compilation \`a la Carte}",
+        booktitle = "{Proceedings of the 25th Symposium on Implementation and Application of Functional Languages}",
+        location = "Nijmegen, The Netherlands",
+        published = "{ACM}",
+        year = 2013}
+@online{generic-arbitrary,
+title={{generic-arbitrary: Generic implementation for QuickCheck's Arbitrary}},
+url={https://hackage.haskell.org/package/generic-arbitrary-0.1.0/docs/src/Test-QuickCheck-Arbitrary-Generic.html#genericArbitrary},
+author={Typeable.io contributors},
+year={2017}
+}
+@online{validity,
+title={{genvalidity-property: Standard properties for functions on `Validity` types}},
+url={https://hackage.haskell.org/package/generic-arbitrary-0.1.0/docs/src/Test-QuickCheck-Arbitrary-Generic.html#genericArbitrary},
+author={Tom Sydney Kerckhove},
+year={2018}
+}
+@inproceedings{quickCheck,
+  abstract = {Quick Check is a tool which aids the Haskell
+                 programmer in formulating and testing properties of
+                 programs. Properties are described as Haskell
+                 functions, and can be automatically tested on random
+                 input, but it is also possible to define custom test
+                 data generators. We present a number of case studies,
+                 in which the tool was successfully used, and also point
+                 out some pitfalls to avoid. Random testing is
+                 especially suitable for functional programs because
+                 properties can be stated at a fine grain. When a
+                 function is built from separately tested components,
+                 then random testing suffices to obtain good coverage of
+                 the definition under test.},
+  added-at = {2010-06-28T20:17:39.000+0200},
+  address = {New York, NY, USA},
+  author = {Claessen, Koen and Hughes, John},
+  biburl = {https://www.bibsonomy.org/bibtex/24272adb91611cf780221e429c73d70e8/mhwombat},
+  booktitle = {ICFP '00: Proceedings of the fifth ACM SIGPLAN
+                 international conference on Functional programming},
+  citeulike-article-id = {2298329},
+  citeulike-linkout-0 = {http://portal.acm.org/citation.cfm?id=351266},
+  citeulike-linkout-1 = {http://dx.doi.org/10.1145/351240.351266},
+  doi = {10.1145/351240.351266},
+  file = {:/home/amy/technotes/haskell/QuickCheck.pdf:PDF;:QuickCheck.pdf:PDF},
+  groups = {public},
+  interhash = {517258f274fb7640ec4d769668b318b0},
+  intrahash = {4272adb91611cf780221e429c73d70e8},
+  isbn = {1-58113-202-6},
+  keywords = {property_based_testing quickcheck random_input test_data testing},
+  pages = {268--279},
+  posted-at = {2010-06-26 08:28:14},
+  priority = {2},
+  publisher = {ACM},
+  timestamp = {2016-07-12T19:25:30.000+0200},
+  title = {QuickCheck: a lightweight tool for random testing of Haskell programs},
+  url = {http://dx.doi.org/10.1145/351240.351266},
+  username = {mhwombat},
+  year = 2000
+}
+@online{haskell-stack,
+  title={{stack 0.1 released}},
+  author={{FP Complete}},
+  howpublished={FP Complete Blog},
+  retrieved={Retrieved 13 January 2016}
+}
+
+@inproceedings{generic-deriving,
 author = {Magalh\~{a}es, Jos\'{e} Pedro and Dijkstra, Atze and Jeuring, Johan and L\"{o}h, Andres},
 title = {A Generic Deriving Mechanism for Haskell},
 year = {2010},
@@ -734,5 +800,11 @@ numpages = {33}
 @online{quickcheck-manual,
   title={{QuickCheck: An Automatic Testing Tool for Haskell}},
   author={{John Hughes}},
-  url={{http://www.cse.chalmers.se/~rjmh/QuickCheck/manual_body.html#16}}
+  url={http://www.cse.chalmers.se/~rjmh/QuickCheck/manual_body.html#16}
+}
+@TECHREPORT{composing-monads,
+    author = {Mark P. Jones and Luc Duponcheel},
+    title = {Composing Monads},
+    institution = {},
+    year = {1993}
 }
