@@ -42,8 +42,8 @@ Especially if the datatypes enjoy nice mathematical laws.
 But it is also the easiest way to make it run for an unreasonably long time.
 We show that connection between deeply recursive data structures, and epidemic growth rate
 can be easily fixed with a generic implementation.
-After our intervention the Arbitrary instances run in linear time with respect to assumed test size,
-and do not need to be written, just instantiated from our generic program.
+After our intervention the Arbitrary instances run in linear time with respect to assumed test size.
+We also provide a fully generic implementation, so error-prone coding process is removed.
 
 # Motivation
 
@@ -70,7 +70,7 @@ instance Arbitrary       a
 Assuming we run QuickCheck with any size parameter greater than 1,
 it will fail to terminate!
 
-List instances is a wee bit better,
+List instance is a wee bit better,
 since it tries to limit maximum list length to a constant
 option:
 
@@ -82,9 +82,9 @@ instance Arbitrary  a
     vectorOf len lessArbitrary
 ```
 
-Indeed QuickCheck manual[@quickcheck-manual]^[We changed `liftM` and `liftM2` to operators for consistency.],
-suggests an error-prone manual method of limiting
-the depth of generated structure:
+Indeed QuickCheck manual[@quickcheck-manual],
+suggests an error-prone, manual method of limiting
+the depth of generated structure by dividing `size` by reproduction factor of the structure^[We changed `liftM` and `liftM2` operators to `<$>` and `<*>` for clarity and consistency.] :
 ```{.haskell}
 data Tree = Leaf Int | Branch Tree Tree
 
@@ -93,22 +93,22 @@ instance Arbitrary Tree where
     where tree' 0 = Leaf <$> arbitrary
 	  tree' n | n>0 = 
 		oneof [Leaf   <$> arbitrary,
-   	               Branch <$> subtree <*> subtree]
+   	       Branch <$> subtree <*> subtree]
   	    where subtree = tree' (n `div` 2)
 ```
+
+Above example uses division of size by maximum branching factor
+to decrease coverage into relatively deep data structures,
+whereas dividing by average branching factor of `~2` will
+generate both deep and very large structures.
 
 This fixes non-termination issue, but still may lead to unpredictable waiting times for nested structures.
 The depth of the generated structure is linearly limited
 by dividing the `n` by expected branching factor of the recursive data structure.
 However this does not work very well for mutually recursive data structures
 occuring in compilers[@compilersALaCarte],
-which may have 30 constructors with variable branching factor
+which may have 30 constructors with highly variable^[Due to list parameters.] branching factor
 just like GHC's `HSExpr` data types.
-
-Here using `div`ision of size by maximum branching factor
-will decrease coverage into relatively deep data structures,
-whereas `div`iding by average branching factor of `~2` will
-generate both deep and very large structures.
 
 Now we have a choice of manual generation of these data structures,
 which certainly introduces bias in testing, or abandoning property testing
@@ -117,7 +117,7 @@ for real-life-sized projects.
 # Complexity analysis
 
 We might be tempted to compute average size of the structure.
-Let's use viral reproduction rate estimate for a single
+Let's use reproduction rate estimate for a single
 rewrite of `arbitrary` function written in conventional way.
 
 We compute a number of recursive references for each constructor.
@@ -128,18 +128,19 @@ If it is slightly smaller, we still can wait a long time.
 What is an issue here is not just non-termination which is fixed by error-prone manual process
 of writing own instances that use explicit `size` parameter.
 
-The much worse issue is unpredictability of the test runtime.
+The much worse issue is unpredictability of the test runtime. Final issue is the poor coverage
+for mutually recursive data structure with multitude of constructors.
 
 Given a _maximum size_ parameter (as it is now called) to QuickCheck,
 would we not expect that tests terminate within linear time of this parameter?
 At least if our computation algorithms are linear with respect to input size?
 
 Currently for any recursive structure like `Tree a`,
-we see some exponential function. For example $ size^n $, where $n$ is a random variable.
+we see some exponential function. For example $size^n$, where $n$ is a random variable.
 
 # Solution
 
-We propose to replace implementation with a simple state monad that actually
+We propose to replace implementation with a simple state monad[@composing-monads] that actually
 remembers how many constructors were generated,
 and thus avoid limiting the depth of generated data structures,
 and ignoring estimation of branching factor altogether.
@@ -159,12 +160,6 @@ We track the spending in the usual way:
 spend :: Cost -> CostGen ()
 spend c = CostGen $ State.modify (-c+)
 ````
-
-Then we limit our choices when budget is tight:
-```{.haskell #budget}
-currentBudget :: CostGen Cost
-currentBudget = CostGen State.get
-```
 
 To make generation easier, we introduce `budget check` operator:
 ```{.haskell #budget}
@@ -231,7 +226,7 @@ Generics allow us to provide default instance,
 by encoding any datatype into its generic `Rep`resentation:
 ```{.haskell #generic-instance}
 instance Generics (Tree a) where
-  to :: Tree a -> Rep (Tree a)
+  to   :: Tree a -> Rep (Tree a)
   from :: Rep (Tree a) -> Tree a
 ```
 
@@ -246,7 +241,9 @@ and see how to declare instances:
 ```{.haskell #generic-instance-other}
 type instance Rep (Tree a) =
   D1
-   ('MetaData "Tree" "Test.Arbitrary" "less-arbitrary" 'False)
+   ('MetaData "Tree"
+              "Test.Arbitrary"
+              "less-arbitrary" 'False)
 ```
 
 2. Then we have constructor metadata `C1`:
@@ -258,7 +255,10 @@ type instance Rep (Tree a) =
 ```{.haskell}
           (S1
              ('MetaSel
-                'Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy)
+                'Nothing
+                'NoSourceUnpackedness
+                'NoSourceStrictness
+                'DecidedLazy)
 ```
 4. And reference to another datatype in the record field value:
 ```{.haskell}
@@ -274,7 +274,10 @@ type instance Rep (Tree a) =
               ('MetaCons "Branch" 'PrefixI 'False)
               (S1
                  ('MetaSel
-                    'Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy)
+                    'Nothing
+                    'NoSourceUnpackedness
+                    'NoSourceStrictness
+                    'DecidedLazy)
                     (Rec0 [Tree a])))
                      ignored
 ```
@@ -299,8 +302,10 @@ Example of `Arbitrary` instance from [@generic-arbitrary] serves as a basic exam
 1. First we convert the type to its generic representation:
 
 ```{.haskell}
-genericArbitrary :: (Generic a, Arbitrary (Rep a)) => Gen a
-genericArbitrary = to <$> arbitrary
+genericArbitrary :: (Generic        a
+                    ,Arbitrary (Rep a))
+                 =>  Gen            a
+genericArbitrary  = to <$> arbitrary
 ```
 
 2. We take care of nullary constructors with:
@@ -337,8 +342,6 @@ instance (Arbitrary  a,
 a number of constructor in each representation type with `SumLen` type family:
 
 ```{.haskell}
--- | Calculates count of constructors encoded by particular ':+:'.
--- Internal use only.
 type family SumLen a :: Nat where
   SumLen (a G.:+: b) = (SumLen a) + (SumLen b)
   SumLen a           = 1
@@ -356,8 +359,10 @@ instance (Arbitrary        a
     [ (lfreq, G.L1 <$> arbitrary)
     , (rfreq, G.R1 <$> arbitrary) ]
     where
-      lfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen a))
-      rfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen b))
+      lfreq = fromIntegral
+            $ natVal (Proxy :: Proxy (SumLen a))
+      rfreq = fromIntegral
+            $ natVal (Proxy :: Proxy (SumLen b))
 ```
 
 Excellent piece of work, but non-terminating for recursive types
@@ -371,7 +376,9 @@ implementation when the budget is positive.
 We just need to spend a dollar for
 each constructor we encounter.
 
-For the `Monoid` the implementation would be trivial:
+For the `Monoid` the implementation would be trivial,
+since we can always use `mempty` and assume it is cheap:
+
 ```{.haskell #generic-less-arbitrary}
 genericLessArbitraryMonoid :: (Generic             a
                               ,GLessArbitrary (Rep a)
@@ -385,7 +392,7 @@ However we want to have fully generic implementation
 that chooses the cheapest constructor even though the
 datatype does not have monoid instance.
 
-### Classy budget-conscious
+### Class for budget-conscious
 
 When the budget is low,
 we need to find the least costly constructor each time.
@@ -420,7 +427,9 @@ For this we need to implement minimum function at the type level:
 type family Min m n where
   Min m n = ChooseSmaller (CmpNat m n) m n
 
-type family ChooseSmaller (o::Ordering) (m::Nat) (n::Nat) where 
+type family ChooseSmaller (o::Ordering)
+                          (m::Nat)
+                          (n::Nat) where 
   ChooseSmaller 'LT m n = m
   ChooseSmaller 'EQ m n = m
   ChooseSmaller 'GT m n = n
@@ -429,12 +438,14 @@ type family ChooseSmaller (o::Ordering) (m::Nat) (n::Nat) where
 so we can choose the cheapest^[We could add instances for :
 ```{.haskell #generic-instances}
 type family Cheapness a :: Nat where
-  Cheapness (a :*: b)  =      Cheapness a + Cheapness b
-  Cheapness (a :+: b)  = Min (Cheapness a) (Cheapness b)
+  Cheapness (a :*: b)  =
+         Cheapness a + Cheapness b
+  Cheapness (a :+: b)  =
+    Min (Cheapness a) (Cheapness b)
   Cheapness  U1                      = 0
   <<flat-types>>
-  Cheapness (K1 a  other           ) = 1
-  Cheapness (C1 a  other           ) = 1
+  Cheapness (K1 a other) = 1
+  Cheapness (C1 a other) = 1
 ```
 
 Since we are only interested in recursive types that can potentially blow out
@@ -445,7 +456,7 @@ Cheapness (S1 a (Rec0 Int       )) = 0
 Cheapness (S1 a (Rec0 Scientific)) = 0
 Cheapness (S1 a (Rec0 Double    )) = 0
 Cheapness (S1 a (Rec0 Bool      )) = 0
-Cheapness (S1 a (Rec0 Text.Text )) = 0
+Cheapness (S1 a (Rec0 Text.Text )) = 1
 Cheapness (S1 a (Rec0 other     )) = 1
 ```
 
@@ -485,7 +496,8 @@ instance GLessArbitrary           f
 
 ### Counting constructors
 
-For the usual case, we need to count number of constructors
+In order to give equal draw chance for each constructor,
+we need to count number of constructors
 in each branch of sum type `:+:` so we can
 generate each constructor with the same frequency:
 
@@ -514,8 +526,10 @@ and then assemble the result:
 instance (GLessArbitrary  a
          ,GLessArbitrary          b)
       =>  GLessArbitrary (a G.:*: b) where
-  gLessArbitrary = (G.:*:) <$> gLessArbitrary <*> gLessArbitrary
-  cheapest       = (G.:*:) <$> cheapest       <*> cheapest
+  gLessArbitrary = (G.:*:) <$> gLessArbitrary
+                           <*> gLessArbitrary
+  cheapest       = (G.:*:) <$> cheapest
+                           <*> cheapest
 ```
 
 We recursively call instances of `LessArbitrary` for the types of fields:
@@ -542,20 +556,24 @@ instance (GLessArbitrary      a
          )
       => GLessArbitrary      (a Generic.:+: b) where
   gLessArbitrary =
-    costFrequency
+    frequency
       [ (lfreq, L1 <$> gLessArbitrary)
       , (rfreq, R1 <$> gLessArbitrary) ]
     where
-      lfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen a))
-      rfreq = fromIntegral $ natVal (Proxy :: Proxy (SumLen b))
+      lfreq = fromIntegral
+            $ natVal (Proxy :: Proxy (SumLen a))
+      rfreq = fromIntegral
+            $ natVal (Proxy :: Proxy (SumLen b))
   cheapest =
       if lcheap <= rcheap
          then L1 <$> cheapest
          else R1 <$> cheapest
     where
       lcheap, rcheap :: Int
-      lcheap = fromIntegral $ natVal (Proxy :: Proxy (Cheapness a))
-      rcheap = fromIntegral $ natVal (Proxy :: Proxy (Cheapness b))
+      lcheap = fromIntegral
+             $ natVal (Proxy :: Proxy (Cheapness a))
+      rcheap = fromIntegral
+             $ natVal (Proxy :: Proxy (Cheapness b))
 ```
 
 
@@ -565,7 +583,7 @@ instance (GLessArbitrary      a
 
 :::::
 
-# Appendix: Module headers
+# Appendix: Module headers {.unnumbered}
 
 ```{.haskell file=test/lib/Test/LessArbitrary.hs}
 {-# language DefaultSignatures     #-}
@@ -690,27 +708,37 @@ instance LessArbitrary                a
 
 ```
 
-# Appendix: lifting classic `Arbitrary` functions
+# Appendix: lifting classic `Arbitrary` functions {.unnumbered}
+
+Below are functions and instances
+that are lightly adjusted variants
+of original implementations in `QuickCheck`[@quickcheck]
 
 ```{.haskell #lifting-arbitrary}
+instance LessArbitrary  a
+      => LessArbitrary [a] where
+  lessArbitrary = pure [] $$$? do
+    budget <- currentBudget
+    len  <- choose (1,fromEnum budget)
+    spend $ Cost len
+    replicateM   len lessArbitrary
 
 instance QC.Testable          a
       => QC.Testable (CostGen a) where
   property = QC.property
            . sizedCost
+```
 
+Remaining functions are directly copied from `QuickCheck`[@quickCheck],
+with only adjustment being their types and error messages:
+
+```{.haskell #lifting-arbitrary}
 forAll :: CostGen a -> (a -> CostGen b) -> CostGen b
 forAll gen prop = gen >>= prop
 
-instance LessArbitrary  a
-      => LessArbitrary [a] where
-  lessArbitrary = pure [] $$$? do
-    len  <- choose (1,100) -- FIXME: use sized
-    spend $ Cost len
-    replicateM   len lessArbitrary
-
 oneof   :: [CostGen a] -> CostGen a
-oneof [] = error "LessArbitrary.oneof used with empty list"
+oneof [] = error
+           "LessArbitrary.oneof used with empty list"
 oneof gs = choose (0,length gs - 1) >>= (gs !!)
 
 elements :: [a] -> CostGen a
@@ -720,16 +748,24 @@ choose      :: Random  a
             =>        (a, a)
             -> CostGen a
 choose (a,b) = CostGen $ lift $ QC.choose (a, b)
+```
 
--- | Chooses one of the given generators, with a weighted random distribution.
--- The input list must be non-empty.
+This key function,
+chooses one of the given generators, with a weighted random distribution.
+The input list must be non-empty. Based on QuickCheck[@quickcheck].
+
+```{.haskell .literate #lifting-arbitrary}
 frequency :: [(Int, CostGen a)] -> CostGen a
-frequency [] = error "LessArbitrary.frequency used with empty list"
+frequency [] =
+  error $ "LessArbitrary.frequency "
+       ++ "used with empty list"
 frequency xs
   | any (< 0) (map fst xs) =
-    error "LessArbitrary.frequency: negative weight"
+    error $ "LessArbitrary.frequency: "
+         ++ "negative weight"
   | all (== 0) (map fst xs) =
-    error "LessArbitrary.frequency: all weights were zero"
+    error $ "LessArbitrary.frequency: "
+         ++ "all weights were zero"
 frequency xs0 = choose (1, tot) >>= (`pick` xs0)
  where
   tot = sum (map fst xs0)
@@ -737,38 +773,17 @@ frequency xs0 = choose (1, tot) >>= (`pick` xs0)
   pick n ((k,x):xs)
     | n <= k    = x
     | otherwise = pick (n-k) xs
-  pick _ _  = error "LessArbitrary.pick used with empty list"
-
-costFrequency :: [(Int, CostGen a)] -> CostGen a
-costFrequency [] = error "LessArbitrary.costFrequency used with empty list"
-costFrequency xs = do
-  budget <- currentBudget
-  if budget>0
-    then frequency                  xs
-    else frequency
-       $ filter ((minFreq==) . fst) xs
-  where
-    minFreq = minimum $ map fst xs
+  pick _ _  = error
+    "LessArbitrary.pick used with empty list"
 ```
 
 # Appendix: test suite {.unnumbered}
 
+As observed in [@validity], it is important
+to check basic properties of `Arbitrary` instance
+to guarantee that shrinking terminates:
 
-```{.haskell file=test/lib/Test/Arbitrary.hs}
-{-# language DataKinds             #-}
-{-# language FlexibleInstances     #-}
-{-# language Rank2Types            #-}
-{-# language MultiParamTypeClasses #-}
-{-# language ScopedTypeVariables   #-}
-{-# language TypeOperators         #-}
-{-# language UndecidableInstances  #-}
-{-# language AllowAmbiguousTypes   #-}
-module Test.Arbitrary where
-
-import Data.Proxy
-import Test.QuickCheck
-import Test.QuickCheck.Classes
-
+```{.haskell #arbitrary-check}
 shrinkCheck :: forall    term.
               (Arbitrary term
               ,Eq        term)
@@ -784,17 +799,15 @@ arbitraryLaws :: forall    ty.
               => Proxy     ty
               -> Laws
 arbitraryLaws (Proxy :: Proxy ty) =
-  Laws "arbitrary" [("does not shrink to itself", property (shrinkCheck :: ty -> Bool))]
+  Laws "arbitrary"
+       [("does not shrink to itself",
+         property (shrinkCheck :: ty -> Bool))]
 ```
 
-# Appendix: non-terminating test suite
+For `LessArbitrary` we can also check that empty budget results in choosing a cheapest option,
+but we need to provide a predicate that confirms what is actually the cheapest:
 
-We can compare the tests with `LessArbitrary` (which terminates fast, linear time):
-```{.haskell file=test/less/LessArbitrary.hs}
-<<test-file-header>>
-<<test-less-arbitrary-version>>
-<<test-file-laws>>
-
+```{.haskell #less-arbitrary-check}
 otherLaws :: [Laws]
 otherLaws = [lessArbitraryLaws isLeaf]
   where
@@ -806,12 +819,42 @@ lessArbitraryLaws :: LessArbitrary a
                   => (a -> Bool) -> Laws
 lessArbitraryLaws cheapestPred =
     Laws "LessArbitrary"
-         [("always selects cheapest", property $ prop_alwaysCheapest cheapestPred)]
+         [("always selects cheapest",
+           property $
+             prop_alwaysCheapest cheapestPred)]
 
 prop_alwaysCheapest :: LessArbitrary a
                     => (a -> Bool) -> Gen Bool
-prop_alwaysCheapest cheapestPred = cheapestPred <$> withCost 0 lessArbitrary
+prop_alwaysCheapest cheapestPred =
+  cheapestPred <$> withCost 0 lessArbitrary
 ```
+
+Again some module headers:
+```{.haskell file=test/lib/Test/Arbitrary.hs}
+{-# language DataKinds             #-}
+{-# language FlexibleInstances     #-}
+{-# language Rank2Types            #-}
+{-# language MultiParamTypeClasses #-}
+{-# language ScopedTypeVariables   #-}
+{-# language TypeOperators         #-}
+{-# language UndecidableInstances  #-}
+{-# language AllowAmbiguousTypes   #-}
+module Test.Arbitrary where
+
+import Data.Proxy
+import Test.QuickCheck
+```
+
+And we can compare the tests with `LessArbitrary` (which terminates fast, linear time):
+```{.haskell file=test/less/LessArbitrary.hs}
+<<test-file-header>>
+<<test-less-arbitrary-version>>
+<<test-arbitrary-check>>
+<<test-file-laws>>
+<<less-arbitrary-check>>
+```
+
+# Appendix: non-terminating test suite {.unnumbered}
 
 Or with a generic `Arbitrary` (which naturally hangs):
 ```{.haskell file=test/nonterminating/NonterminatingArbitrary.hs}
@@ -845,7 +888,6 @@ import Test.Arbitrary
 <<tree-type>>
 ```
 
-
 ```{.haskell #test-less-arbitrary-version}
 instance LessArbitrary       a
       => LessArbitrary (Tree a) where
@@ -856,10 +898,20 @@ instance LessArbitrary   a
 ```
 
 ```{.haskell #test-file-laws}
-
+<<arbitrary-check>>
 main :: IO ()
 main = do
-  lawsCheckMany [("Tree", [arbitraryLaws (Proxy :: Proxy (Tree Int))
-                          ,eqLaws        (Proxy :: Proxy (Tree Int))
-                          ] <> otherLaws)]
+  lawsCheckMany
+    [("Tree",
+      [arbitraryLaws (Proxy :: Proxy (Tree Int))
+      ,eqLaws        (Proxy :: Proxy (Tree Int))
+      ] <> otherLaws)]
+```
+
+# Appendix: convenience functions provided with the module {.unnumbered}
+
+Then we limit our choices when budget is tight:
+```{.haskell #budget}
+currentBudget :: CostGen Cost
+currentBudget = CostGen State.get
 ```

@@ -6,6 +6,8 @@ SRC=towards-better-union.md \
     final.md \
     appendices.md
 PDF=out/${NAME}.pdf
+LHS=out/${NAME}.lhs
+LHSPP=out/${NAME}.lhs.tex
 #TPDF=out/${SRC:.md=_te.pdf}
 HTML=out/${NAME}.html
 TEX=out/${NAME}.tex
@@ -14,13 +16,14 @@ REFDOCX=acm_submission_template.docx
 PICS=offset-array-example.eps
 OPTIONS=--mathml				\
 	--filter pandoc-crossref		\
+ 	--filter pandoc-citeproc		\
 	--filter pandoc-hide-codeblocks		\
 	--highlight-style=haddock		\
 	--from=markdown+tex_math_dollars+yaml_metadata_block+footnotes+yaml_metadata_block \
 	--columns 40 \
 	--csl acm-template/acm-sig-proceedings.csl \
-	--filter pandoc-filter-graphviz		\
-	--listings \
+	--filter pandoc-filter-graphviz		
+#	--listings \
 #	--filter pandoc-citeproc		\
 
 TEMPLATE=acm-template/new-template.tex
@@ -65,7 +68,21 @@ ${PDF}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${BIBLIO}
 		--template=${TEMPLATE}		\
 		--pdf-engine=xelatex		\
 		-o ${PDF} ${SRC}
+	--csl=templates/acm-sig-proceedings.csl	\
+
+#${LHS}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${BIBLIO}
+#	pandoc ${OPTIONS} \
+#		--template=${TEMPLATE}		\
+#		--pdf-engine=xelatex		\
 #	--csl=templates/acm-sig-proceedings.csl	\
+#	        --to=latex+lhs \
+#		-o ${LHS} ${SRC}
+
+#${LHSPP}: ${LHS}
+#	lhs2TeX ${LHS} -o ${LHSPP}
+
+#${PDF}: ${LHSPP} ${IMG_PLOTS}
+#	xelatex ${LHSPP}
 
 ${HTML}: ${IMG_PLOTS} ${SRC} ${BIBLIO}
 	pandoc ${OPTIONS}		\
