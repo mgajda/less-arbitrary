@@ -354,7 +354,7 @@ instance MappingConstraint `Types`
     MappingConstraint
       (foldMap infer $ Map.keys obj)
       (foldMap infer            obj)
-  check (MappingConstraint {..}) obj =
+  check MappingConstraint {..} obj =
        all (check keyConstraint)
            (Map.keys obj)
     && all (check valueConstraint)
@@ -417,9 +417,13 @@ about the possible values.]
 data ObjectConstraint = ObjectConstraint {
     mappingCase :: MappingConstraint
   , recordCase  :: RecordConstraint
-  } deriving (Eq,Show,Generic)
+  } 
+  | ObjectNever
+  deriving (Eq,Show,Generic)
 
 instance Semigroup ObjectConstraint where
+  ObjectNever <> a = a
+  a <> ObjectNever = a
   a <> b =
     ObjectConstraint {
       mappingCase =
@@ -429,12 +433,10 @@ instance Semigroup ObjectConstraint where
     }
 
 instance Monoid ObjectConstraint where
-  mempty = ObjectConstraint {
-             mappingCase = mempty
-           , recordCase  = mempty
-           }
+  mempty = ObjectNever
 
 instance Typelike ObjectConstraint where
+  beyond ObjectNever           = False
   beyond ObjectConstraint {..} =
        beyond mappingCase
     && beyond recordCase
@@ -442,6 +444,7 @@ instance Typelike ObjectConstraint where
 instance ObjectConstraint `Types` Object where
   infer v = ObjectConstraint (infer v)
                              (infer v)
+  check ObjectNever           _ = False
   check ObjectConstraint {..} v =
        check mappingCase v
     && check recordCase  v
@@ -483,20 +486,21 @@ data ArrayConstraint  = ArrayConstraint {
     arrayCase :: UnionType
   , rowCase   :: RowConstraint
   }
+  | ArrayNever
   deriving (Show, Eq, Generic)
 
 instance Monoid ArrayConstraint where
-  mempty = ArrayConstraint {
-             arrayCase = mempty
-           , rowCase   = mempty
-           }
+  mempty = ArrayNever
 
 instance Typelike ArrayConstraint where
+  beyond ArrayNever = False
   beyond ArrayConstraint {..} =
        beyond arrayCase
     && beyond rowCase
 
 instance Semigroup ArrayConstraint where
+  ArrayNever <> a          = a
+  a          <> ArrayNever = a
   a1 <> a2 =
     ArrayConstraint {
       arrayCase = ((<>) `on` arrayCase) a1 a2
@@ -512,6 +516,7 @@ instance ArrayConstraint `Types` Array
         (mconcat (infer <$>
                Foldable.toList vs))
         (infer              vs)
+    check ArrayNever           vs = False
     check ArrayConstraint {..} vs =
          and (check arrayCase <$>
                 Foldable.toList vs)
@@ -591,10 +596,8 @@ data UnionType =
   , unionBool :: BoolConstraint
   , unionNum  :: NumberConstraint
   , unionStr  :: StringConstraint
-  --, unionArr  :: ArrayConstraint
-  , unionArr  :: PresenceConstraint Array --ArrayConstraint
-  , unionObj  :: PresenceConstraint Object --ObjectConstraint
-  --, unionObj  :: ObjectConstraint
+  , unionArr  :: ArrayConstraint
+  , unionObj  :: ObjectConstraint
   }
   deriving (Eq,Show,Generic)
 
