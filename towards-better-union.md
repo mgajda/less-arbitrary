@@ -506,7 +506,7 @@ mempty_contains_no_terms
   -> Bool
 mempty_contains_no_terms term =
       check (mempty :: ty) term
-        `shouldBe` False
+        == False
 ```
 
 Second important rule of typing is that all terms are typed successfully by any
@@ -634,7 +634,8 @@ Let us first consider typing of flat types: `String` and `Number`.
 
 First we infer the type description for integer valuess[^12]:
 
-``` {#basic-constraints .haskell}
+```{.haskell #basic-constraints}
+
 data IntConstraint = IntRange Int Int
                    | IntNever
                    | IntAny
@@ -809,7 +810,7 @@ type role PresenceConstraint nominal
 data PresenceConstraint a =
     Present
   | Absent
-  deriving (Eq, Show)
+  deriving (Eq, Show, Typeable, Generic)
 
 instance Semigroup (PresenceConstraint a) where
   Absent  <> a       = a
@@ -935,7 +936,7 @@ data MappingConstraint =
   MappingConstraint {
       keyConstraint   :: StringConstraint
     , valueConstraint :: UnionType
-    } deriving (Eq, Show, Generic)
+    } deriving (Eq, Show, Generic, Typeable)
 
 instance Monoid MappingConstraint where
   mempty = MappingConstraint {
@@ -979,7 +980,7 @@ data RecordConstraint =
   | RCBottom
   | RecordConstraint {
         fields :: HashMap Text UnionType
-      } deriving (Show,Eq,Generic)
+      } deriving (Show,Eq,Generic, Typeable)
 
 instance Typelike RecordConstraint where
   beyond = (==RCTop)
@@ -1531,6 +1532,7 @@ Bibliography {#bibliography .unnumbered}
 {-# language RoleAnnotations        #-}
 {-# language ViewPatterns           #-}
 {-# language RecordWildCards        #-}
+{-# ghc_option  -fno-orphans        #-}
 module Unions where
 
 import           Control.Arrow(second)
@@ -1551,6 +1553,7 @@ import           Data.HashMap.Strict(HashMap)
 import           GHC.Generics(Generic)
 import           Data.Time.ISO8601
 import           Data.Hashable
+import           Data.Typeable
 
 <<freetype>>
 <<typelike>>
@@ -1577,6 +1580,7 @@ import           Data.Hashable
 {-# language TupleSections         #-}
 {-# language UndecidableInstances  #-}
 {-# language AllowAmbiguousTypes   #-}
+{-# ghc_option  -fno-orphans        #-}
 module Main where
 
 import qualified Data.HashMap.Strict as Map
@@ -1823,17 +1827,17 @@ main = do
   sample $ arbitrary @ObjectConstraint
 
   lawsCheckMany 
-    [typesSpec (Proxy :: Proxy (FreeType Value) ) (Proxy :: Proxy Value)
+    [typesSpec (Proxy :: Proxy (FreeType Value) ) (Proxy :: Proxy Value     )
     ,typesSpec (Proxy :: Proxy NumberConstraint ) (Proxy :: Proxy Scientific)
-    ,typesSpec (Proxy :: Proxy StringConstraint ) (Proxy :: Proxy String)
-    ,typesSpec (Proxy :: Proxy BoolConstraint   ) (Proxy :: Proxy Bool)
-    ,typesSpec (Proxy :: Proxy NullConstraint   ) (Proxy :: Proxy ()  )
-    ,typesSpec (Proxy :: Proxy RowConstraint    ) (Proxy :: Proxy Array  ) -- Eq loops
-    ,typesSpec (Proxy :: Proxy ArrayConstraint  ) (Proxy :: Proxy Array  )
-    ,typesSpec (Proxy :: Proxy MappingConstraint) (Proxy :: Proxy Object  ) -- loops
-    ,typesSpec (Proxy :: Proxy RecordConstraint ) (Proxy :: Proxy Object  ) -- loops
-    ,typesSpec (Proxy :: Proxy ObjectConstraint ) (Proxy :: Proxy Object  )
-    ,typesSpec (Proxy :: Proxy UnionType        ) (Proxy :: Proxy Value   )
+    ,typesSpec (Proxy :: Proxy StringConstraint ) (Proxy :: Proxy Text.Text )
+    ,typesSpec (Proxy :: Proxy BoolConstraint   ) (Proxy :: Proxy Bool      )
+    ,typesSpec (Proxy :: Proxy NullConstraint   ) (Proxy :: Proxy ()        )
+    ,typesSpec (Proxy :: Proxy RowConstraint    ) (Proxy :: Proxy Array     ) -- Eq loops
+    ,typesSpec (Proxy :: Proxy ArrayConstraint  ) (Proxy :: Proxy Array     )
+    ,typesSpec (Proxy :: Proxy MappingConstraint) (Proxy :: Proxy Object    ) -- loops
+    ,typesSpec (Proxy :: Proxy RecordConstraint ) (Proxy :: Proxy Object    ) -- loops
+    ,typesSpec (Proxy :: Proxy ObjectConstraint ) (Proxy :: Proxy Object    )
+    ,typesSpec (Proxy :: Proxy UnionType        ) (Proxy :: Proxy Value     )
     ]
 
 typesSpec :: (Typeable  ty
@@ -1846,6 +1850,7 @@ typesSpec :: (Typeable  ty
              ,Eq        ty
              ,Eq           term
              ,Typelike  ty
+             ,Types     ty term
              )
           =>  Proxy     ty
           ->  Proxy        term
@@ -1857,20 +1862,28 @@ typesSpec (tyProxy :: Proxy ty) (termProxy :: Proxy term) =
     , monoidLaws            tyProxy
     , commutativeMonoidLaws tyProxy
     , typelikeLaws          tyProxy
-    , arbitraryLaws         termProxy
-    , eqLaws                termProxy
-    , typesLaws             termProxy tyProxy
+    , arbitraryLaws                 termProxy
+    , eqLaws                        termProxy
+    , typesLaws             tyProxy termProxy 
     ])
 
-typesLaws :: _
+typesLaws :: (          ty `Types` term
+             ,Arbitrary ty
+             ,Arbitrary            term
+             ,Show      ty
+             ,Show                 term
+             )
+          => Proxy ty
+          -> Proxy term
+          -> Laws
 typesLaws (_ :: Proxy ty) (_ :: Proxy term) =
   Laws "Types" [("mempty contains no terms"
                 ,property $ mempty_contains_no_terms        @ty @term)
-                ("beyond contains all terms"
+               ,("beyond contains all terms"
                 ,property $ beyond_contains_all_terms       @ty @term)
-                ("inferred type contains its term"
+               ,("inferred type contains its term"
                 ,property $ inferred_type_contains_its_term @ty @term)
-                ]
+               ]
 ```
 
 # Appendix: package dependencies {#appendix-package-dependencies .unnumbered}
