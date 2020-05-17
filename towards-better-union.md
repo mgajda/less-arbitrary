@@ -245,7 +245,7 @@ the type inference non-monotonic, since
 a dictionary with a single key would
 have an incompatible type:
 
-```
+```{.haskell file=test/example6-single-key.result}
 data Example = Example { f_6408f5 :: O_6408f5 }
 data O_6408f5 = O_6408f5 {
     size       :: Int

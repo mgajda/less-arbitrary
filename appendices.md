@@ -6,16 +6,12 @@
 {-# language DeriveGeneric          #-}
 {-# language DuplicateRecordFields  #-}
 {-# language FlexibleInstances      #-}
-{-# language FunctionalDependencies #-}
 {-# language MultiParamTypeClasses  #-}
 {-# language NamedFieldPuns         #-}
 {-# language PartialTypeSignatures  #-}
 {-# language ScopedTypeVariables    #-}
-{-# language StandaloneDeriving     #-}
-{-# language TypeApplications       #-}
 {-# language TypeOperators          #-}
 {-# language RoleAnnotations        #-}
-{-# language TypeSynonymInstances   #-}
 {-# language ViewPatterns           #-}
 {-# language RecordWildCards        #-}
 module Unions where
@@ -37,6 +33,7 @@ import qualified Data.HashMap.Strict as Map
 import           Data.HashMap.Strict(HashMap)
 import           GHC.Generics(Generic)
 import           Data.Time.ISO8601
+import           Data.Hashable
 
 <<freetype>>
 <<typelike>>
@@ -109,12 +106,6 @@ instance LessArbitrary Value where
 
 instance Arbitrary Object where
   arbitrary = fasterArbitrary
-
-{-
-instance LessArbitrary Object where
-  lessArbitrary =
-    pure Map.empty <$$$?>
-      (Map.fromList <$> lessArbitrary)-}
 
 instance Arbitrary Array where
   arbitrary = fasterArbitrary
@@ -310,23 +301,35 @@ typesLaws :: (Typeable  ty
              ,Show      ty
              ,Show         term
              ,Eq        ty
-             ,Eq           term)
+             ,Eq           term
+             ,Typelike  ty
+             )
           =>  Proxy     ty
           ->  Proxy        term
           -> (String, [Laws])
 typesLaws (tyProxy :: Proxy ty) (termProxy :: Proxy term) =
   (nameOf @ty <> " types " <> nameOf @term, [
-      arbitraryLaws tyProxy
-    , eqLaws        tyProxy
-    , monoidLaws    tyProxy
-    , arbitraryLaws termProxy
-    , eqLaws        termProxy
+      arbitraryLaws         tyProxy
+    , eqLaws                tyProxy
+    , monoidLaws            tyProxy
+    , commutativeMonoidLaws tyProxy
+    , typelikeLaws          tyProxy
+    , arbitraryLaws         termProxy
+    , eqLaws                termProxy
     ])
 
 main = do
   putStrLn "NumberConstraint"
-  quickCheck $ shrinkCheck @NumberConstraint
-  lawsCheck  $ monoidLaws (Proxy :: Proxy NumberConstraint)
+  --quickCheck $ shrinkCheck @NumberConstraint
+  sample $ arbitrary @Value
+  sample $ arbitrary @NullConstraint
+  sample $ arbitrary @NumberConstraint
+  sample $ arbitrary @RowConstraint
+  sample $ arbitrary @RecordConstraint
+  sample $ arbitrary @ArrayConstraint
+  sample $ arbitrary @MappingConstraint
+  sample $ arbitrary @ObjectConstraint
+
   lawsCheckMany 
     [typesLaws (Proxy :: Proxy (FreeType Value) ) (Proxy :: Proxy Value)
     ,typesLaws (Proxy :: Proxy NumberConstraint ) (Proxy :: Proxy Scientific)
@@ -340,6 +343,7 @@ main = do
     ,typesLaws (Proxy :: Proxy ObjectConstraint ) (Proxy :: Proxy Object  )
     ,typesLaws (Proxy :: Proxy UnionType        ) (Proxy :: Proxy Value   )
     ]
+
 ```
 
 # Appendix: package dependencies {.unnumbered}
@@ -418,7 +422,7 @@ tests:
 -- In order to represent `FreeType` for the `Value`,
 -- we need to add `Ord` instance for it:
 instance Ord       Value where
-  compare = compare `on` encodeConstructors
+  compare = compare `on` hash
 
 fromEnum' :: Enum a => a -> Integer
 fromEnum' = fromIntegral . fromEnum

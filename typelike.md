@@ -119,20 +119,6 @@ are many elements in the `beyond` set.
 Key property of the `beyond` set, is that it
 is closed to information acquisition:
 ```{.haskell #typelike-spec}
-typelikeSpec :: forall       ty.
-               (Typelike     ty
-               --,GenUnchecked ty
-               ,Typeable     ty
-               ,Arbitrary    ty)
-             => Spec
-typelikeSpec = describe ("Typelike " <> nameOf @ty) $ do
-  {-commutativeSemigroupSpec @ty
-  monoidSpec    @ty-}
-  prop (nameOf  @ty <> " is commutative") $
-    commutativeOnArbitrary @ty (<>)
-  -- need beyond generator!
-  {-prop (nameOf  @ty <> "beyond set is closed") $
-    beyond_is_closed @ty-}
 
 beyond_is_closed :: forall   ty.
                     Typelike ty
@@ -140,6 +126,10 @@ beyond_is_closed :: forall   ty.
 beyond_is_closed ty1 ty2 = do
   beyond (ty1 :: ty) ==> beyond (ty1 <> ty2)
 
+typelikeLaws (Proxy :: Proxy a) =
+  Laws "Typelike"
+    [("beyond is closed",
+      property $ beyond_is_closed @a)]
 ```
 
 It is convenient validation when testing a recursive structure of the type.

@@ -849,7 +849,7 @@ And we can compare the tests with `LessArbitrary` (which terminates fast, linear
 ```{.haskell file=test/less/LessArbitrary.hs}
 <<test-file-header>>
 <<test-less-arbitrary-version>>
-<<test-arbitrary-check>>
+
 <<test-file-laws>>
 <<less-arbitrary-check>>
 ```
