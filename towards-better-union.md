@@ -129,14 +129,14 @@ motivation for the present study:
 -   *API argument is an email* -- it is subset of valid `String`
     values, that can be validated on the client side.
 
-``` {.json .hidden file="test/example1a.json"}
+```{.json .hidden file="test/example1a.json"}
 {"message": "Where can I submit my proposal?",
     "uid" : 1014}
 {"error"  : "Authorization failed",
    "code" : 401}
 ```
 
-``` {.haskell .hidden file="test/example1a.result"}
+```{.haskell .hidden file=test/example1a.result}
 newtype Example = Example Email
 ```
 
@@ -1518,7 +1518,7 @@ Bibliography {#bibliography .unnumbered}
 
 # Appendix: module headers {#appendix-module-headers .unnumbered}
 
-``` {.haskell .hidden file="src/Unions.hs"}
+```{.haskell .hidden language="Haskell" file=src/Unions.hs}
 {-# language AllowAmbiguousTypes    #-}
 {-# language DeriveGeneric          #-}
 {-# language DuplicateRecordFields  #-}
@@ -1565,7 +1565,7 @@ import           Data.Hashable
 <<missing>>
 ```
 
-``` {.haskell .hidden file="test/spec/Spec.hs"}
+```{.haskell .hidden file=test/spec/Spec.hs}
 {-# language FlexibleInstances     #-}
 {-# language Rank2Types            #-}
 {-# language MultiParamTypeClasses #-}
@@ -1875,7 +1875,7 @@ typesLaws (_ :: Proxy ty) (_ :: Proxy term) =
 
 # Appendix: package dependencies {#appendix-package-dependencies .unnumbered}
 
-``` {.yaml .hpack file="package.yaml"}
+``` {.yaml .hpack file=package.yaml}
 name: union-types
 version: '0.1.0.0'
 category: Web
