@@ -129,14 +129,14 @@ motivation for the present study:
 -   *API argument is an email* -- it is subset of valid `String`
     values, that can be validated on the client side.
 
-```{.json .hidden file="test/example1a.json"}
+``` {.json language="JSON" file=test/example1a.json .hidden}
 {"message": "Where can I submit my proposal?",
     "uid" : 1014}
 {"error"  : "Authorization failed",
    "code" : 401}
 ```
 
-```{.haskell .hidden file=test/example1a.result}
+``` {.haskell language="Haskell" file=test/example1a.result .hidden}
 newtype Example = Example Email
 ```
 
@@ -144,14 +144,14 @@ newtype Example = Example Email
     max:10,000)* - it is also a subset of integer values (`Int`) between $10$,
     and $10,000$
 
-``` {.json .hidden file="test/example1b.json"}
+``` {.json language="JSON" file=test/example1b.json .hidden }
 {"example": [
   10,
   10000
 ]}
 ```
 
-``` {.haskell .hidden file="test/example1b.result"}
+``` {.haskell file=test/example1b.result .hidden }
 newtype Example = Example [Int]
 ```
 
@@ -159,11 +159,11 @@ newtype Example = Example [Int]
 -   as a `String` that contains a calendar date in the format
     `"2019-03-03"`
 
-``` {.json .hidden file="test/example1c.json"}
+``` {.json file="test/example1c.json" .hidden}
 "2019-03-03"
 ```
 
-``` {.haskell .hidden file="test/example1c.result"}
+``` {.haskell file=test/example1c.result .hidden}
 newtype Example = Example Date
 ```
 
@@ -173,12 +173,12 @@ newtype Example = Example Date
 -   a record `{"page_size": 50}`
     or an empty record that should be interpreted as default value `{}`
 
-``` {.json .hidden file="test/example2.json"}
+``` {.json file=test/example2.json .hidden}
 {}
 {"page_size": 50}
 ```
 
-``` {.haskell .hidden file="test/example2.result"}
+```{.haskell file=test/example2.result .hidden}
 newtype Example = Example { page_size :: Maybe Int }
 ```
 
@@ -187,12 +187,12 @@ newtype Example = Example { page_size :: Maybe Int }
 -   *Answer to a query is either a number of of registered objects, or
     String `"unavailable"`* - this is integer value (`Int`) or a `String`
 
-``` {.json .hidden file="test/example3.json"}
+```{.json file=test/example3.json .hidden}
 "alpha"
 10
 ```
 
-``` {.haskell .hidden file="test/example3.result"}
+``` {.haskell .hidden file=test/example3.result}
 newtype Example = Example (String :|: Int)
 ```
 
@@ -201,7 +201,7 @@ newtype Example = Example (String :|: Int)
 -   *Answer contains either a text message with an user id, or an error.* --
     That is can be represented as one of following options:
 
-``` {.json file="test/example4.json"}
+``` {.json file=test/example4.json}
 {"message" : "Where can I submit my proposal?", "uid"  : 1014}
 {"message" : "Submit it to HotCRP",             "uid"  :  317}
 {"error"   : "Authorization failed",            "code" :  401}
@@ -210,7 +210,7 @@ newtype Example = Example (String :|: Int)
 
 5.  Arrays corresponding to records[^2]:
 
-``` {.json file="test/example5.json"}
+``` {.json file=test/example5.json}
 [
   [1, "Nick",    null       ]
 , [2, "George", "2019-04-11"]
@@ -218,7 +218,7 @@ newtype Example = Example (String :|: Int)
 ]
 ```
 
-``` {.haskell .hidden file="test/example5.result"}
+``` {.haskell .hidden file=test/example5.result}
 data Examples = Examples [Example]
 
 data Example = Example {
@@ -230,7 +230,7 @@ data Example = Example {
 
 6.  Maps of identical objects[^3]:
 
-``` {.json file="test/example6.json"}
+``` {.json file=test/example6.json}
 {
     "6408f5": {
         "size": 969709,
@@ -253,7 +253,7 @@ data Example = Example {
 }
 ```
 
-``` {.haskell .hidden file="test/example6.result"}
+``` {.haskell .hidden file=test/example6.result}
 newtype Examples = Example (Map String Example)
 
 data Example {
@@ -270,7 +270,7 @@ It should be noted that the last example presented above requires
 Haskell representation inference to be non-monotonic,
 as a dictionary with a single key would have an incompatible type:
 
-``` {.haskell file="test/example6-single-key.result"}
+``` {.haskell file=test/example6-single-key.result}
 data Example = Example { f_6408f5 :: O_6408f5 }
 data O_6408f5 = O_6408f5 {
     size       :: Int
@@ -323,7 +323,7 @@ Preliminaries
 As we focus on JSON, we utilize Haskell encoding of the JSON term
 for convenient reading[^5]; specified as follows:
 
-``` {.haskell file="refs/Data/Aeson.hs"}
+``` {.haskell file=refs/Data/Aeson.hs}
 data Value =
     Object (Map String Value)
   | Array  [Value]
@@ -336,7 +336,7 @@ data Value =
 To incorporate both integers and exact decimal fractions[^6] in
 the considered number representation, we employ decimal floating point[@scientific]:
 
-``` {.haskell file="refs/Data/Scientific.hs"}
+``` {.haskell file=refs/Data/Scientific.hs}
 data Scientific =
   Scientific { coefficient    :: Integer
              , base10Exponent :: Int }
@@ -353,7 +353,7 @@ To denote unification operation, or **information fusion** between two type desc
 we use a `Semigroup` interface operation `<>` to merge types inferred
 from different observations.
 
-``` {.haskell file="refs/Data/Semigroup.hs"}
+``` {.haskell file=refs/Data/Semigroup.hs}
 class Semigroup ty where
   (<>) :: ty -> ty -> ty
 ```
@@ -874,14 +874,14 @@ a `String`, and if this check fails, we attempt to parse it as `String`.
 Variant records are slightly more complicated, as it may be unclear which
 typing is better to use:
 
-``` {.json .javascript file="test/example_variant1.json"}
+``` {.json .javascript file=test/example_variant1.json}
 {"message": "Where can I submit my proposal?",
     "uid" : 1014}
 {"error"  : "Authorization failed",
    "code" : 401}
 ```
 
-``` {.haskell file="test/example_variant1.result"}
+``` {.haskell file=test/example_variant1.result}
 data OurRecord =
   OurRecord { message :: Maybe String
             , error   :: Maybe String
@@ -891,7 +891,7 @@ data OurRecord =
 
 Or:
 
-``` {.haskell file="test/example_variant2.result"}
+``` {.haskell file=test/example_variant2.result}
 data OurRecord2 = Message { message :: String
                           , uid     :: Int }
                 | Error   { error   :: String
@@ -909,7 +909,7 @@ only have two samples to begin with so we cannot be sure.
 
 In the case of having more samples, the pattern emerges:
 
-``` {.json file="test/example_variant2.json"}
+``` {.json file=test/example_variant2.json}
 {"error"  : "Authorization failed",
     "code":  401}
 {"message": "Where can I submit my proposal?",
@@ -1875,7 +1875,7 @@ typesLaws (_ :: Proxy ty) (_ :: Proxy term) =
 
 # Appendix: package dependencies {#appendix-package-dependencies .unnumbered}
 
-``` {.yaml .hpack file=package.yaml}
+```{.yaml .hpack file=package.yaml}
 name: union-types
 version: '0.1.0.0'
 category: Web
