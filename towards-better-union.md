@@ -811,14 +811,16 @@ data PresenceConstraint a =
   | Absent
   deriving (Eq, Show)
 
-instance Typelike (PresenceConstraint a) where
-  mempty = Absent
-  beyond    = Present
-
-instance Monoid (PresenceConstraint a) where
+instance Semigroup (PresenceConstraint a) where
   Absent  <> a       = a
   a       <> Absent  = a
   Present <> Present = Present
+
+instance Monoid (PresenceConstraint a) where
+  mempty             = Absent
+
+instance Typelike (PresenceConstraint a) where
+  beyond    = (==Present)
 
 instance PresenceConstraint a `Types` a where
   infer _         = Present
@@ -1953,6 +1955,7 @@ encodeConstructors (Object o) =
       (fromEnum' <$> Text.unpack k) <>
       encodeConstructors v
 ```
+
 ``` {#missing .haskell}
 isValidDate :: Text -> Bool
 isValidDate = isJust
@@ -1962,3 +1965,50 @@ isValidDate = isJust
 isValidEmail :: Text -> Bool
 isValidEmail = Text.Email.Validate.isValid
            . Text.encodeUtf8
+```
+
+[^1]: Or at least beyond `bottom` exploding to *infamous undefined
+    behaviour*[@undefined1,@undefined2,@undefined3].
+
+[^2]: Which strikes author as a bad practice, but it is part of
+    real-life APIs. We might want to make it optional with
+    `--array-records` option.
+
+[^3]: Example taken from @quicktype.
+
+[^4]: And compiler feature of checking for unmatched cases.
+
+[^5]: As used by Aeson[@aeson] package.
+
+[^6]: JavaScript and JSON use binary floating point instead, but we
+    stick to the representation chosen by `aeson` library that parses
+    JSON.
+
+[^7]: In this case: `beyond (Error _) = True | otherwise = False`.
+
+[^8]: May sound similar until we consider adding more information to the
+    type.
+
+[^9]: Note that many, but not all type constraints will be semilattice.
+    See counting example below.
+
+[^10]: So both `forall a. (<> a)` and ∀`a.(a<>)` are keep result in the
+    `beyond` set.
+
+[^11]: Shortest, by information complexity principle.
+
+[^12]: Program makes it optional `--infer-int-ranges`.
+
+[^13]: Choice of representation will be explained later. Here we only
+    consider gathering of information about the possible values.
+
+[^14]: Impatient reader could ask: what is the *union type* without *set
+    union*? When the sets are disjoint, we just put the values in
+    different bins for easier handling.
+
+[^15]: If we detect pattern to early, we risk make our types to narrow
+    to work with actual API answers.
+
+[^16]: Option `--max-alternative-constructors=N`
+
+[^17]: Option `--min-enumeration-cardinality`.
