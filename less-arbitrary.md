@@ -171,11 +171,6 @@ cheapVariants $$$? costlyVariants = do
      else cheapVariants
 ```
 
-```{.haskell #budget .hidden}
-(<$$$?>) :: CostGen a -> CostGen a -> CostGen a
-(<$$$?>) = ($$$?)
-```
-
 In order to conveniently define our budget generators,
 we might want to define a class for them:
 
@@ -783,7 +778,7 @@ As observed in [@validity], it is important
 to check basic properties of `Arbitrary` instance
 to guarantee that shrinking terminates:
 
-```{.haskell #arbitrary-check}
+```{.haskell #arbitrary-laws}
 shrinkCheck :: forall    term.
               (Arbitrary term
               ,Eq        term)
@@ -839,10 +834,15 @@ Again some module headers:
 {-# language TypeOperators         #-}
 {-# language UndecidableInstances  #-}
 {-# language AllowAmbiguousTypes   #-}
-module Test.Arbitrary where
+module Test.Arbitrary(
+      arbitraryLaws
+    ) where
 
 import Data.Proxy
 import Test.QuickCheck
+import Test.QuickCheck.Classes
+
+<<arbitrary-laws>>
 ```
 
 And we can compare the tests with `LessArbitrary` (which terminates fast, linear time):
@@ -898,7 +898,7 @@ instance LessArbitrary   a
 ```
 
 ```{.haskell #test-file-laws}
-<<arbitrary-check>>
+
 main :: IO ()
 main = do
   lawsCheckMany
