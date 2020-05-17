@@ -6,9 +6,6 @@ If inference fails, we can always correct it by adding additional example.
 Minimal definition of the typing inference and checking relations
 
 ```{.haskell file=refs/Data/Monoid.hs}
-class Semigroup ty where
-  (<>) :: ty -> ty -> ty
-
 class Semigroup ty
    => Monoid    ty
   where
@@ -22,18 +19,16 @@ obvious violations.
 We use `validity-properties` package[@validity]
 for common properties:
 ```{.haskell #typelike-spec}
-commutativeSemigroupSpec :: forall       ty.
-                           (Semigroup    ty
-                           ,Show         ty
-                           ,Eq           ty
-                           ,Arbitrary    ty
-                           )
-                         => Spec
-commutativeSemigroupSpec = do
-  prop "commutative" $
-        commutativeOnArbitrary @ty (<>)
-  prop "associative" $
-        associativeOnArbitrary @ty (<>)
+beyond_is_closed :: forall   ty.
+                    Typelike ty
+                 => ty -> ty -> Property
+beyond_is_closed ty1 ty2 = do
+  beyond (ty1 :: ty) ==> beyond (ty1 <> ty2)
+
+typelikeLaws (Proxy :: Proxy a) =
+  Laws "Typelike"
+    [("beyond is closed",
+      property $ beyond_is_closed @a)]
 ```
 
 Neutral element of the `Typelike` monoid,
@@ -196,45 +191,19 @@ since it only considers semilattice with unification operation.
 ## Laws of typing
 
 ```{.haskell #types-spec .hidden}
-
-typesSpec :: forall ty         v.
-                   (ty `Types` v
-                   ,Typelike ty
-                   ,Arbitrary  v
-                   ,Show       v
-                   ,Arbitrary  ty
-                   ,Show       ty
-                   ,Typeable   ty)
-          => Spec
-typesSpec = do
-  describe ("Types " <> nameOf @ty) $ do
-    prop "mempty contains no terms" $
-      mempty_contains_no_terms        @ty @v
-    prop "beyond contains all terms" $
-      beyond_contains_all_terms       @ty @v
-    prop "inferred type always contains its term" $ do
-      inferred_type_contains_its_term @ty @v
-    prop (nameOf  @ty <> "fusion keeps terms") $
-      fusion_keeps_terms @ty @v
-
-```
-First we note that to describe _no information_,
-`mempty` cannot correctly type any term:
-
-```{.haskell #types-spec}
 mempty_contains_no_terms
   :: forall    ty term.
      (Typelike ty
      ,Types    ty term)
   =>              term
-  -> Expectation
+  -> Bool
 mempty_contains_no_terms term =
       check (mempty :: ty) term
         `shouldBe` False
 ```
+First we note that to describe _no information_,
+`mempty` cannot correctly type any term:
 
-It is also important for typing:
-all terms are typed successfully by any value `beyond`.
 ```{.haskell #types-spec}
 beyond_contains_all_terms :: forall ty    term.
                             (Types  ty    term
@@ -246,10 +215,9 @@ beyond_contains_all_terms ty term = do
     term `shouldSatisfy` check ty
 ```
 
-However getting types `beyond` may be non-obvious for some instances.
-In this case we would use special generator `arbitraryBeyond`:
+It is also important for typing:
+all terms are typed successfully by any value `beyond`.
 ```{.haskell #types-spec}
-
 {-
 beyond_contains_all_terms2 :: forall   ty term.
                              (Typelike ty
@@ -260,10 +228,9 @@ beyond_contains_all_terms2 term =
   -}
 ```
 
-For typing we have additional rule:
-type inferred from a term, must always be valid
-for the very same term.
-``` {.haskell #types-spec}
+However getting types `beyond` may be non-obvious for some instances.
+In this case we would use special generator `arbitraryBeyond`:
+```{.haskell #types-spec}
 inferred_type_contains_its_term ::
      forall ty         term.
             ty `Types` term
@@ -271,6 +238,19 @@ inferred_type_contains_its_term ::
   -> Bool
 inferred_type_contains_its_term term =
   check ((infer:: term -> ty) term) (term :: term)
+```
+
+For typing we have additional rule:
+type inferred from a term, must always be valid
+for the very same term.
+``` {.haskell #types-spec}
+fusion_keeps_terms :: forall   ty v.
+                     (Typelike ty
+                     ,ty `Types` v)
+                   => v -> ty -> ty -> Property
+fusion_keeps_terms v ty1 ty2 = do
+  check ty1 v || check ty2 v ==>
+    check (ty1 <> ty2) v
 ```
 
 Law asserts that the following diagram commutes:
