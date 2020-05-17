@@ -8,52 +8,6 @@
 #### Constraints on string type
 
 ``` {.haskell #basic-constraints}
-data StringConstraint =
-    SCDate
-  | SCEmail
-  | SCEnum  (Set Text)
-  | SCNever
-  | SCAny
-  deriving(Eq, Show,Generic)
-
-instance StringConstraint `Types` Text where
-  infer (isValidDate  -> True) = SCDate
-  infer (isValidEmail -> True) = SCEmail
-  infer  value                 = SCEnum $
-                      Set.singleton value
-
-  check  SCDate     s = isValidDate  s
-  check  SCEmail    s = isValidEmail s
-  check (SCEnum vs) s = s `Set.member` vs
-  check  SCNever    _ = False
-  check  SCAny      _ = True
-```
-
-Then whenever unifying the `String` constraint:
-```{.haskell #basic-constraints}
-instance Semigroup StringConstraint where
-  SCNever    <>  a             = a
-  a          <>  SCNever       = a
-  SCAny      <>  _             = SCAny
-  _          <>  SCAny         = SCAny
-  SCDate     <>  SCDate        = SCDate
-  SCEmail    <>  SCEmail       = SCEmail
-  (SCEnum a) <> (SCEnum b)     |
-          length (a <> b) < 10 = SCEnum (a <> b)
-  _          <>  _             = SCAny
-
-instance Monoid StringConstraint where
-  mappend = (<>)
-  mempty  = SCNever
-
-instance Typelike StringConstraint where
-  beyond  = (==SCAny)
-```
-
-#### Constraints on number type
-
-Analogically we may infer for integer constraints^[Program makes it optional `--infer-int-ranges`.] as:
-```{.haskell #basic-constraints}
 data IntConstraint = IntRange Int Int
                    | IntNever
                    | IntAny
@@ -81,7 +35,7 @@ instance IntConstraint `Types` Int where
   check (IntRange a b) i = a <= i && i <= b
 ```
 
-JavaScript has one number type that holds both `Float` and `Int`, so JSON inherits that:
+Then whenever unifying the `String` constraint:
 ```{.haskell #basic-constraints}
 data NumberConstraint =
     NCInt
@@ -105,6 +59,52 @@ instance NumberConstraint `Types` Scientific where
   check NCNever sci = False
 
 <<standard-instances-number-constraint>>
+```
+
+#### Constraints on number type
+
+Analogically we may infer for integer constraints^[Program makes it optional `--infer-int-ranges`.] as:
+```{.haskell #basic-constraints}
+data StringConstraint =
+    SCDate
+  | SCEmail
+  | SCEnum  (Set Text)
+  | SCNever
+  | SCAny
+  deriving(Eq, Show,Generic)
+
+instance StringConstraint `Types` Text where
+  infer (isValidDate  -> True) = SCDate
+  infer (isValidEmail -> True) = SCEmail
+  infer  value                 = SCEnum $
+                      Set.singleton value
+
+  check  SCDate     s = isValidDate  s
+  check  SCEmail    s = isValidEmail s
+  check (SCEnum vs) s = s `Set.member` vs
+  check  SCNever    _ = False
+  check  SCAny      _ = True
+```
+
+JavaScript has one number type that holds both `Float` and `Int`, so JSON inherits that:
+```{.haskell #basic-constraints}
+instance Semigroup StringConstraint where
+  SCNever    <>  a             = a
+  a          <>  SCNever       = a
+  SCAny      <>  _             = SCAny
+  _          <>  SCAny         = SCAny
+  SCDate     <>  SCDate        = SCDate
+  SCEmail    <>  SCEmail       = SCEmail
+  (SCEnum a) <> (SCEnum b)     |
+          length (a <> b) < 10 = SCEnum (a <> b)
+  _          <>  _             = SCAny
+
+instance Monoid StringConstraint where
+  mappend = (<>)
+  mempty  = SCNever
+
+instance Typelike StringConstraint where
+  beyond  = (==SCAny)
 ```
 
 ```{.haskell #standard-rules-number-constraint}
@@ -196,30 +196,26 @@ After seeing `true` value we also expect
 for a boolean value is its presence or absence.
 
 ``` {.haskell #presence-absence-constraints}
-type BoolConstraint = PresenceConstraint Bool
-
 type role PresenceConstraint nominal
 
 data PresenceConstraint a =
-    Present -- ^ some values seen
-  | Absent  -- ^ no information
-  deriving (Eq,Show,Generic)
-
-instance Semigroup (PresenceConstraint a) where
-  Present <> _       = Present
-  _       <> Present = Present
-  Absent  <> Absent  = Absent
-
-instance Monoid (PresenceConstraint a) where
-  mempty = Absent
+    Present
+  | Absent
+  deriving (Eq, Show)
 
 instance Typelike (PresenceConstraint a) where
-  beyond = (==Present)
+  mempty = Absent
+  beyond    = Present
+
+instance Monoid (PresenceConstraint a) where
+  Absent  <> a       = a
+  a       <> Absent  = a
+  Present <> Present = Present
 
 instance PresenceConstraint a `Types` a where
-  infer _ = Present
-  check Absent  _ = False
+  infer _         = Present
   check Present _ = True
+  check Absent  _ = False
 ```
 Here we have basic presence constraint for any non-Void type:
 (...repetition...)
@@ -237,7 +233,7 @@ The same for `null`, since there is only one
 `null` value.
 
 ``` {.haskell #presence-absence-constraints}
-type NullConstraint = PresenceConstraint ()
+type BoolConstraint = PresenceConstraint Bool
 ```
 
 ### Selecting basic priors
@@ -322,7 +318,6 @@ constraint for JSON object type should
 either representing it as a `Map`, or
 a record:
 ```{.haskell #object-constraint}
-
 data MappingConstraint =
   MappingConstraint {
       keyConstraint   :: StringConstraint
@@ -481,7 +476,6 @@ the union type to Haskell declaration.
 Again, we put the record of
 two different possible representations:
 ```{.haskell #array-constraint}
-
 data ArrayConstraint  = ArrayConstraint {
     arrayCase :: UnionType
   , rowCase   :: RowConstraint
@@ -521,7 +515,6 @@ instance ArrayConstraint `Types` Array
          and (check arrayCase <$>
                 Foldable.toList vs)
       && check rowCase   vs
-
 ```
 
 ### Row constraint
