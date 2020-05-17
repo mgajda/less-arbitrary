@@ -926,7 +926,7 @@ In the case of having more samples, the pattern emerges:
 
 To avoid information loss, a constraint for JSON object type is
 introduced in such a way to **simultaneously gather information** about
-either representing it as a `Map`, or as a record.
+representing it either as a `Map`, or a record.
 
 The typing of `Map` would be specified as follows:
 
@@ -1357,35 +1357,39 @@ a type constraint in a conventional sense. Instead it counts the
 number of samples observed for the constraint inside so that we can decide
 on which alternative representation is best supported by evidence.
 
-Therefore, at each step, we may need to maintain a **cardinality** of each
-possible value, and being provided with sufficient number of samples,
-we may attempt to detect [^15].
+Therefore, at each step, we may need to maintain a **cardinality** of
+each possible value, and being provided with sufficient number of
+samples, we may attempt to detect [^15].
 
-To preserve efficiency, we may want to merge whenever the number of
-alternatives in a multiset crosses the threshold. [^16] And only
-attempt to narrow strings when cardinality crosses the threshold [^17]
+To preserve efficiency, we may need to merge whenever the number of
+alternatives in a multiset crosses the threshold. [^16] We can attempt to
+narrow strings only in the cases when cardinality crosses the threshold [^17].
 
-# Selecting representation
+# Selecting representations
 
 Specifying heuristics to achieve better types
 ---------------------------------------------
 
-The final touch would be to postprocess assigned type before generating
-it, in order to make it more resilient to common uncertainties.
+The final touch would be to perform the post-processing of an assigned
+type before generating it to make it more resilient to common
+uncertainties.
 
-Note that these assumptions my sidestep our validity criterion from the
-initial part of the paper, however they proved to work well in practice.
+It should be noted that these assumptions may bypass the defined
+least-upper-bound criterion specified in the initial part of the paper; however,
+they prove to work well in practice.
 
 ### Array type with no element observations
 
-If we have no observations of array type, it can be inconvenient to
-disallow array to contain any value at all. Thus we make a non-monotonic
-step of converting the `mempty` in the final `Typelike` to
-representation allowing any `Value` there on the input.
+If we have no observations corresponding to an array type, it can be
+inconvenient to disallow an array to contain any values at all.
+Therefore, we introduce a non-monotonic step of converting
+the `mempty` into a final `Typelike` object aiming to
+introduce a representation allowing the occurrence of any `Value` in the input.
+That still preserves the validity of the typing.
 
-That is because, our program must not have any assumptions about these
-values, but at the same it should be able to output them for debugging
-purposes.
+We note that the proposed program must not have any assumptions about
+these values; however, at the same time it should be able to print them for
+debugging purposes.
 
 Overall processing scheme
 -------------------------
@@ -1422,19 +1426,20 @@ digraph {
 }
 ```
 
-Simplification by finding unification candidates
-------------------------------------------------
+Simplification by identifying unification candidates
+----------------------------------------------------
 
-In most JSON documents we found that the same object was described in
-different parts of the sample datastructures. Because of that, we
-compare sets of labels assigned to all objects, and propose to unify
-those that have more than 60% identical labels.
+In most JSON documents, we observe that the same object can be described
+in different parts of sample data structures. Due to this reason, we
+compare the sets of labels assigned to all objects and propose to unify
+those that have more than 60% of identical labels.
 
-For transparency, candidates found are logged for the user, and the user
-can also indicate them explicitly instead of relying on automation.
+For transparency, the identified candidates are logged for each user,
+and a user can also indicate them explicitly instead of relying on
+automation.
 
-We found that this greatly decreases the complexity of types, and makes
-output less redundant.
+We conclude that this allows considerably decreasing the complexity of
+types and makes the output less redundant.
 
 Future work
 ===========
@@ -1442,57 +1447,68 @@ Future work
 Scaling to type environments
 ----------------------------
 
-For now we have only discussed typing of treelike values. However, it is
-natural to scale this approach to multiple types in API, where different
-types are referred to by name, and possibly contain each other.
+In the present paper, we only discuss typing of tree-like values.
+However, it is natural to scale this approach to multiple types in APIs,
+in which different types are referred to by name and possibly contain
+each other.
 
-To address this situation, we show that environment of typelikes is also
-`Typelike`, and constraint unification can be extended the same way.
+To address these cases, we will show that the environment of `Typelike` objects
+is also `Typelike`, and that constraint unification
+can be extended in the same way.
 
 Generic derivation of Typelike
 ------------------------------
 
-Note that `Typelike` instances for non-simple types usually follow one
-of two patterns: 1. For typing terms that have a finite sum of disjoint
-constructors, we bin this information by constructor during the
-`infer`ence 2. for typing terms that have two alternative
-representations we apply we `infer` all constraints separately, by
-applying the `infer`ence to the same term
+It should be noted that `Typelike` instances for non-simple types usually
+follow one the two patterns:
 
-In both cases derivation of `Monoid`, and `Typelike` instances is the
-same.
+1. for typing terms that have a finite sum of disjoint
+constructors, we bin this information by each constructor during the
+inference
 
-That allows us to use GHC `Generic`s[@generics,@generic-monoid] to
-define standard implementations for most of the boilerplate code!
+2. for typing terms with multiple alternative
+representations, we infer all constraints separately for each representation
+by applying a different inference algorithm to the same term
 
-That means that we only will have to manually define: \* new constraint
-types, \* inference from constructors (case 1) and entirety of handling
-alternative constraints is implemented, until we choose representations.
+In both cases, the derivation procedure of the `Monoid`, and `Typelike`
+instances is the same.
+
+It allows using GHC `Generic`s[@generics,@generic-monoid] to
+specify standard implementations for most of the boilerplate code.
+
+It means that we only have to manually define the following:
+
+* new constraint data types^[In many cases one can also rely on a generic constraint representation derived from `Generic` representation type `Rep`, that is when inference is mutually exclusive by term type constructors.],
+* inference from constructors (case 1), as well as
+  providing the entirety of handling alternative constraints until we
+  select representations.
 
 Conclusion
 ----------
 
-We derive types that are valid with respect to specification, and thus
-give the best information from the input.
+In the present study, we aimed to derive the types that were valid with
+respect to the provided specification, thereby obtaining the information
+from the input in most comprehensive way.
 
-We define type inference as representation learning, and type system
-engineering as a meta-learning problem, where our our **priors about
-data structure induce typing rules**.
+We defined type inference as representation learning and type system
+engineering as a meta-learning problem in which the **priors
+corresponding to the data structure induced typing rules**.
 
-We also make a mathematical formulation of **union type discipline** as
-manipulation of bounded join-semilattices with neutral element, that
-represent knowledge given about the data structure.
+We also formulated the **union type discipline** as
+manipulation of `Typelike` commutative monoids, that
+represented knowledge about the data structure.
 
-We also propose a union type system engineering methodology, justifying
-it by theoretical criteria, and showing that it consistently explains
-our decisions in practice.
+In addition, we proposed a union type system engineering methodology
+that was logically justified by a theoretical criteria. We demonstrated that it
+was capable of consistently explaining the decisions made in practice.
 
-We hope that this kind of *formally justified type system engineering*
-will be more ubiquitous in practice, replacing *ad-hoc* approaches in
-the future.
+We consider that this kind of *formally justified type system
+engineering* can become widely used in practice, replacing *ad-hoc*
+approaches in the future.
 
-This paves the way towards formal construction and derivation of type
-systems from a specification of value domains and design constraints.
+The proposed approach may be used to underlie the way towards formal
+construction and derivation of type systems based on the specification
+of value domains and design constraints.
 
 Bibliography {#bibliography .unnumbered}
 ============
@@ -1500,8 +1516,7 @@ Bibliography {#bibliography .unnumbered}
 ::: {#refs}
 :::
 
-Appendix: module headers {#appendix-module-headers .unnumbered}
-========================
+# Appendix: module headers {#appendix-module-headers .unnumbered}
 
 ``` {.haskell .hidden file="src/Unions.hs"}
 {-# language AllowAmbiguousTypes    #-}
@@ -1857,10 +1872,8 @@ typesLaws (_ :: Proxy ty) (_ :: Proxy term) =
                 ,property $ inferred_type_contains_its_term @ty @term)
                 ]
 ```
-```
 
-Appendix: package dependencies {#appendix-package-dependencies .unnumbered}
-==============================
+# Appendix: package dependencies {#appendix-package-dependencies .unnumbered}
 
 ``` {.yaml .hpack file="package.yaml"}
 name: union-types
@@ -1974,21 +1987,21 @@ isValidEmail = Text.Email.Validate.isValid
            . Text.encodeUtf8
 ```
 
-[^1]: Or at least beyond `bottom` exploding to *infamous undefined
+[^1]: Or at least beyond `bottom` expanding to *infamous undefined
     behaviour*[@undefined1,@undefined2,@undefined3].
 
-[^2]: Which strikes author as a bad practice, but it is part of
-    real-life APIs. We might want to make it optional with
+[^2]: Which is considered a bad practice; however, it is part of
+    real-life APIs. We may need to make it optional using the
     `--array-records` option.
 
-[^3]: Example taken from @quicktype.
+[^3]: The example is taken from @quicktype.
 
-[^4]: And compiler feature of checking for unmatched cases.
+[^4]: Compiler feature of checking for unmatched cases.
 
 [^5]: As used by Aeson[@aeson] package.
 
-[^6]: JavaScript and JSON use binary floating point instead, but we
-    stick to the representation chosen by `aeson` library that parses
+[^6]: JavaScript and JSON use a binary floating point instead; however
+    we follow the representation selected by `aeson` library that parses
     JSON.
 
 [^7]: In this case: `beyond (Error _) = True | otherwise = False`.
@@ -1996,26 +2009,27 @@ isValidEmail = Text.Email.Validate.isValid
 [^8]: May sound similar until we consider adding more information to the
     type.
 
-[^9]: Note that many, but not all type constraints will be semilattice.
-    See counting example below.
+[^9]: It should be noted that many but not all type constraints are
+    semilattice. Please refer to the counting example below.
 
-[^10]: So both `forall a. (<> a)` and ∀`a.(a<>)` are keep result in the
+[^10]: So both in `forall a. (<> a)` and ∀`a.(a<>)` the result is kept in the
     `beyond` set.
 
-[^11]: Shortest, by information complexity principle.
+[^11]: The shortest one accoding to the information complexity
+       principle.
 
-[^12]: Program makes it optional `--infer-int-ranges`.
+[^12]: The implementation will make it optional with `--infer-int-ranges`.
 
 [^13]: Choice of representation will be explained later. Here we only
-    consider gathering of information about the possible values.
+    consider acquiring the information about possible values.
 
-[^14]: Impatient reader could ask: what is the *union type* without *set
-    union*? When the sets are disjoint, we just put the values in
-    different bins for easier handling.
+[^14]: The question may arise: what is the *union type* without *set
+    union*? When the sets are disjoint, we just put the values in different
+    bins to enable easier handling.
 
-[^15]: If we detect pattern to early, we risk make our types to narrow
-    to work with actual API answers.
+[^15]: If we detect a pattern too early, we risk to make the types too
+    narrow to work with actual API answers.
 
-[^16]: Option `--max-alternative-constructors=N`
+[^16]: Option `--max-alternative-constructors=N`.
 
 [^17]: Option `--min-enumeration-cardinality`.
