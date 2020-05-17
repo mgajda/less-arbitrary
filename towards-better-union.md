@@ -1268,24 +1268,27 @@ instance UnionType `Types` Value where
 
 ### Overlapping alternatives
 
-Crux of union type systems have been long dealing with conflicting types
-on the input.
+The essence of union type systems have long been dealing with
+the conflicting types providen in the input.
 
-Motivated by examples above, we want to also deal with conflicting
-alternative assignments.
+Motivated by the examples above, we also aim to address
+conflicting alternative assignments.
 
-It is apparent that examples 4. to 6. hint at more than one assignment:
+It is apparent that examples 4. to 6. hint at more than one
+assignment:
 
-5.  Either a list of lists of values that are one of `Int`, `String`, or
+5.  A set of lists of values that may correspond to `Int`, `String`, or
     `null`, or a table that has the same (and predefined) type for each
+    values.
 
-6.  Either a record of fixed names, or the mapping from hash to a single
-    object type.
+6.  A record of fixed names or the mapping from hash to a single object
+    type.
 
 ### Counting observations
 
-How can we make sure that we have a right number of samples? This is
-another example:
+In this section, we discuss how to gather information about the
+number of samples supporting each alternative type constraint.
+To explain this, the other example can be considered:
 
 ``` {.json}
 {"samples":
@@ -1302,13 +1305,15 @@ another example:
 ]}
 ```
 
-First we need to identify it as a list of same elements, and then to
-notice, that there are multiple instances of each record example. That
-suggests that the best would be to use not sets, but multisets of
-inferred records, and attempt to minimize the term.
+First, we need to identify it as a list of similar elements. 
+Second, we note, that there are multiple instances of each record example. We
+consider that the best approach would be to use the multisets of
+inferred records instead of normal sets.
+To find the best representation, we can a type complexity,
+and attempt to minimize the term.
 
-Next is detection of similarities between type descriptions developed
-for different parts of the term:
+Next step is to detect the similarities between type descriptions
+introduced for different parts of the term:
 
 ``` {.json}
 {"samples"      :  [...],
@@ -1317,8 +1322,8 @@ for different parts of the term:
 }
 ```
 
-We can add auxiliary information about number of samples seen and the
-constraint will stay `Typelike`:
+We can add the auxiliary information about a number of samples observed,
+and the constraint remains a `Typelike` object:
 
 ``` {#counted .haskell}
 data Counted a =
@@ -1340,28 +1345,30 @@ instance Typelike          a
   beyond Counted {..} = beyond constraint
 ```
 
-We can connect `Counted` as parametric functor to our types in order to
+We can interconnect `Counted` as parametric functor to select constraints to
 track auxiliary information.
 
-Note that the `Counted` constraint is the first example of constraint
-that is not a semilattice, that is `a<>a/=a`.
+It should be noted that `Counted` constraint is the first example that
+does not correspond to a semilattice, that is `a<>a/=a`.
 
-This is because it is `Typelike`, but it is not a type constraint in a
-traditional sense, instead it counts the samples observed for the
-constraint inside, so we can decide which alternative representation is
-best supported by evidence.
 
-Thus at each step we might want to keep a **cardinality** of each
-possible value, and given enough samples, attempt to detect patterns
-[^15].
+This is because it is a `Typelike` object; however, it is not
+a type constraint in a conventional sense. Instead it counts the
+number of samples observed for the constraint inside so that we can decide
+on which alternative representation is best supported by evidence.
 
-In order to preserve efficiency, we might want to merge whenever, number
-of alternatives in the multiset crosses the threshold. [^16] And only
+Therefore, at each step, we may need to maintain a **cardinality** of each
+possible value, and being provided with sufficient number of samples,
+we may attempt to detect [^15].
+
+To preserve efficiency, we may want to merge whenever the number of
+alternatives in a multiset crosses the threshold. [^16] And only
 attempt to narrow strings when cardinality crosses the threshold [^17]
-\# Choosing representation
 
-Heuristics for better types
----------------------------
+# Selecting representation
+
+Specifying heuristics to achieve better types
+---------------------------------------------
 
 The final touch would be to postprocess assigned type before generating
 it, in order to make it more resilient to common uncertainties.
