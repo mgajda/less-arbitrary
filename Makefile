@@ -1,10 +1,6 @@
 #SRC=plan.md
 NAME=towards-better-union
-SRC=towards-better-union.md \
-    typelike.md \
-    constraints.md \
-    final.md \
-    appendices.md
+SRC=towards-better-union.md
 PDF=out/${NAME}.pdf
 LHS=out/${NAME}.lhs
 LHSPP=out/${NAME}.lhs.tex
