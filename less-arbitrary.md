@@ -163,12 +163,16 @@ spend c = CostGen $ State.modify (-c+)
 
 To make generation easier, we introduce `budget check` operator:
 ```{.haskell #budget}
-($$$?) :: CostGen a -> CostGen a -> CostGen a
+($$$?) :: CostGen a
+       -> CostGen a
+       -> CostGen a
 cheapVariants $$$? costlyVariants = do
   budget <- CostGen State.get
-  if budget > (0 :: Cost)
-     then costlyVariants
-     else cheapVariants
+  if | budget > (0 :: Cost) -> costlyVariants
+     | budget > -10000      -> cheapVariants
+     | otherwise            -> error $
+       "Recursive structure with no loop breaker."
+       
 ```
 
 In order to conveniently define our budget generators,
@@ -465,8 +469,8 @@ or we are beyond our allocation
 and need to generate from among the cheapest possible options.
 
 ```{.haskell #generic-less-arbitrary}
-instance (GLessArbitrary       f)
-      =>  GLessArbitrary (D1 a f) where 
+instance GLessArbitrary       f
+      => GLessArbitrary (D1 m f) where 
   gLessArbitrary = do
     spend 1
     M1 <$> (cheapest $$$? gLessArbitrary)
@@ -588,7 +592,9 @@ instance (GLessArbitrary      a
 {-# language Rank2Types            #-}
 {-# language PolyKinds             #-}
 {-# language MultiParamTypeClasses #-}
+{-# language MultiWayIf            #-}
 {-# language ScopedTypeVariables   #-}
+{-# language TypeApplications      #-}
 {-# language TypeOperators         #-}
 {-# language TypeFamilies          #-}
 {-# language UndecidableInstances  #-}
@@ -914,4 +920,17 @@ Then we limit our choices when budget is tight:
 ```{.haskell #budget}
 currentBudget :: CostGen Cost
 currentBudget = CostGen State.get
+```
+
+```{.haskell #budget .hidden}
+-- unused: loop breaker message type name
+type family ShowType k where
+  ShowType (D1 ('MetaData name _ _ _) _) = name
+  ShowType  other                        = "unknown type"
+
+showType :: forall                      a.
+            (Generic                    a
+            ,KnownSymbol (ShowType (Rep a)))
+         => String
+showType  = symbolVal (Proxy :: Proxy (ShowType (Rep a)))
 ```
