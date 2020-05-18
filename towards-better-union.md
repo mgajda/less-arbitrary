@@ -110,8 +110,8 @@ stray beyond their desired types[^1].
 
 It is also worth noting that traditional Hindley-Milner type disciplines embrace the laws of soundness,
 and subject-reduction.
-However these laws often prove too strict during type system extension[@impredicative-types],
-and are abandoned in practice of larger systems[@ghc].
+However these laws often prove too strict during type system extension,
+and are abandoned in practice of larger systems[@GHCZurihac].
 
 Motivation
 ==========
@@ -210,7 +210,7 @@ newtype Example = Example (String :|: Int)
 
 5.  Arrays corresponding to records[^2]:
 
-``` {.json file=test/example5.json}
+``` {.json file=test/example5.json #lst:row-constraint}
 [
   [1, "Nick",    null       ]
 , [2, "George", "2019-04-11"]
@@ -450,7 +450,7 @@ that has been conventionally assumed for type constraints
 [@subtype-inequalities], as this requirement is valid only for strict type
 constraint inference, not for a more general type inference considered
 as a learning problem. As we observe in the example
-[@example:row-constraint], we need to perform non-monotonic inference
+[@lst:row-constraint], we need to perform non-monotonic inference
 when dealing with alternative representations.
 
 When a specific instance of `Typelike` is also a semilattice (an idempotent semigroup),
@@ -798,7 +798,7 @@ However, the deficiency of this notion of *free type* is that it does not allow
 generalizing in infinite and recursive domains! It only allows utilizing objects from
 the sample.
 
-Presence and absence constraint
+Presence and absence constraint {#sec:presence-absence-constraints}
 -------------------------------
 
 We call this useful case a *presence or absence constraint*:
