@@ -447,7 +447,7 @@ to contain at least one error message.[^9]
 
 It should be noted that here, we abolish the semilattice requirement
 that has been conventionally assumed for type constraints
-[\@semilattice], as this requirement is valid only for strict type
+[@subtype-inequalities], as this requirement is valid only for strict type
 constraint inference, not for a more general type inference considered
 as a learning problem. As we observe in the example
 [@example:row-constraint], we need to perform non-monotonic inference
@@ -465,7 +465,7 @@ It is convenient validation when testing a recursive structure of the
 type.
 
 Note that we abolish semilattice requirement that was traditionally
-assumed for type constraints here[@semilattice].
+assumed for type constraints here[@subtyping-lattice].
 
 That is because this requirement is valid only for strict type
 constraint inference, not for a more general type inference as a
