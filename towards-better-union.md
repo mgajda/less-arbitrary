@@ -1009,22 +1009,24 @@ The typing of `Map` would be specified as follows:
 ``` {#object-constraint .haskell}
 data MappingConstraint =
   MappingConstraint {
-      keyConstraint   :: StringConstraint
-    , valueConstraint :: UnionType
-    } deriving (Eq, Show, Generic, Typeable)
+    keyConstraint   :: StringConstraint
+  , valueConstraint :: UnionType
+  }
+  | MappingNever
+  deriving (Eq, Show, Generic, Typeable)
 
 instance Monoid MappingConstraint where
-  mempty = MappingConstraint {
-      keyConstraint   = mempty
-    , valueConstraint = mempty
-    }
+  mempty = MappingNever
 
 instance Typelike MappingConstraint where
+  beyond MappingNever = False
   beyond MappingConstraint {..} =
        beyond keyConstraint
     && beyond valueConstraint
 
 instance Semigroup   MappingConstraint where
+  MappingNever <> a = a  
+  a <> MappingNever = a  
   a <> b = MappingConstraint {
       keyConstraint   =
         ((<>) `on` keyConstraint  ) a b
@@ -1038,6 +1040,7 @@ instance MappingConstraint `Types`
     MappingConstraint
       (foldMap infer $ Map.keys obj)
       (foldMap infer            obj)
+  check MappingNever           _   = False
   check MappingConstraint {..} obj =
        all (check keyConstraint)
            (Map.keys obj)
@@ -1048,6 +1051,7 @@ instance MappingConstraint `Types`
 Cost of mapping representation is a sum of cost of its fields:
 ```{.haskell #object-constraint}
 instance TypeCost MappingConstraint where
+  typeCost MappingNever           = 0
   typeCost MappingConstraint {..} = typeCost keyConstraint
                                   + typeCost valueConstraint
 ```
@@ -1061,8 +1065,8 @@ data RecordConstraint =
     RCTop
   | RCBottom
   | RecordConstraint {
-        fields :: HashMap Text UnionType
-      } deriving (Show,Eq,Generic, Typeable)
+      fields :: HashMap Text UnionType
+    } deriving (Show,Eq,Generic, Typeable)
 
 instance Typelike RecordConstraint where
   beyond = (==RCTop)
@@ -1089,8 +1093,8 @@ instance RecordConstraint `Types` Object
     check RCBottom _ = False
     -- FIXME: treat extra keys!!!
     check rc obj
-            | Map.keys (fields rc)
-           == Map.keys        obj  =
+            | all (`elem` Map.keys (fields rc))
+                         (Map.keys  obj)  =
       and $ Map.elems $
         Map.intersectionWith  check
                              (fields rc)
@@ -1159,6 +1163,7 @@ we can say that minimum cost of this type is a minimum of component costs:
 
 ```{.haskell #object-constraint}
 instance TypeCost ObjectConstraint where
+  typeCost ObjectNever           = 0
   typeCost ObjectConstraint {..} =
     typeCost mappingCase `min`
     typeCost recordCase
