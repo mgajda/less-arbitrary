@@ -625,7 +625,6 @@ For this purpose, we set the following rules of type design:
     `X :: x` and `Y :: y` must correspond to a valid typing.
 
 
-
 ### Flat type constraints
 
 Let us first consider typing of flat types: `String` and `Number`.
@@ -923,6 +922,82 @@ In the case of having more samples, the pattern emerges:
     "code":  404}
 ```
 
+#### Type cost function
+
+Since we are interested in types with less complexity and less optionality,
+we will define cost function as follows:
+
+```{.haskell #typecost}
+newtype TyCost = TyCost Int
+  deriving (Eq, Ord, Show, Enum, Num)
+
+class Typelike ty
+   => TypeCost ty where
+  typeCost :: ty -> TyCost
+  typeCost a | a == mempty = 0
+             | otherwise   = 1
+
+instance Semigroup TyCost where
+  (<>) = (+)
+
+instance Monoid TyCost where
+  mempty = 0
+```
+
+When presented with several alternate representations
+from the same set of observations, we will use this function
+to select the least complex representation of the type.
+For flat constraints as above, we infer that they
+offer no optionality when no observations occured (cost of $0$),
+otherwise the cost is $1$.
+
+Considering that types `beyond` are to be avoided,
+we can assign conceptual _infinity_ to these values.
+For the implementation purposes we will represent
+it by the value so high, that is unlikely to ever occur
+in practical types, but still small enough that we
+can add it without checking for overflow.
+
+```{.haskell #typecost}
+inf :: TyCost
+inf = 100000000
+```
+
+Type cost should be non-negative, and non-decreasing when we add new
+observations to the type:
+```{.haskell #typecost-laws}
+prop_typeCost_is_non_negative :: TypeCost ty
+                              => ty -> Bool
+prop_typeCost_is_non_negative ty =
+  typeCost ty >= 0
+
+prop_typeCost_is_non_decreasing :: TypeCost ty
+                                => ty -> ty -> Bool
+prop_typeCost_is_non_decreasing ty1 ty2 =
+     typeCost ty1 <= typeCost (ty1<>ty2)
+  && typeCost ty2 <= typeCost (ty1<>ty2)
+
+typeCostLaws :: (TypeCost  ty
+                ,Arbitrary ty)
+             =>  Proxy     ty
+             ->  Laws
+typeCostLaws (Proxy :: Proxy ty)=
+  Laws "TypeCost"
+    [("non-negative"
+     ,property $ prop_typeCost_is_non_negative   @ty)
+    ,("non-decreasing"
+     ,property $ prop_typeCost_is_non_decreasing @ty)]
+
+```
+
+```{.haskell #typecost .hidden}
+instance TypeCost IntConstraint where
+instance TypeCost NumberConstraint where
+instance TypeCost StringConstraint where
+instance TypeCost BoolConstraint where
+instance TypeCost NullConstraint where
+```
+
 ### Object constraint
 
 To avoid information loss, a constraint for JSON object type is
@@ -970,11 +1045,18 @@ instance MappingConstraint `Types`
            (Foldable.toList obj)
 ```
 
+Cost of mapping representation is a sum of cost of its fields:
+```{.haskell #object-constraint}
+instance TypeCost MappingConstraint where
+  typeCost MappingConstraint {..} = typeCost keyConstraint
+                                  + typeCost valueConstraint
+```
+
 Separately, we acquire the information about
 a possible typing of a JSON
 object as a record of values:
 
-``` {#object-constraint .haskell}
+``` {.haskell #object-constraint}
 data RecordConstraint =
     RCTop
   | RCBottom
@@ -1014,6 +1096,12 @@ instance RecordConstraint `Types` Object
                              (fields rc)
                               obj
     check _  _ = False
+
+instance TypeCost RecordConstraint where
+  typeCost RCBottom = 0
+  typeCost RCTop    = inf
+  typeCost RecordConstraint { fields } =
+    Foldable.foldMap typeCost fields
 ```
 
 Observing that the two abstract domains considered above are
@@ -1065,6 +1153,17 @@ It should be noted that this *intersection approach* to address
 alternative union type representations benefits from  *principal type property*,
 meaning that a principal type is used to simply acquire the information
 corresponding to different representations and handle it separately.
+
+Since we plan to choose only one representation for the object,
+we can say that minimum cost of this type is a minimum of component costs:
+
+```{.haskell #object-constraint}
+instance TypeCost ObjectConstraint where
+  typeCost ObjectConstraint {..} =
+    typeCost mappingCase `min`
+    typeCost recordCase
+```
+
 
 ### Array constraint
 
@@ -1123,6 +1222,18 @@ instance ArrayConstraint `Types` Array
       && check rowCase   vs
 ```
 
+For the arrays, we plan to again choose only one
+of possible representations, so the cost of optionality
+is the lesser of the costs of the representation-specific constraints:
+
+```{.haskell #object-constraint}
+instance TypeCost ArrayConstraint where
+  typeCost ArrayNever = 0
+  typeCost ArrayConstraint {..} =
+    typeCost arrayCase `min`
+    typeCost rowCase
+```
+
 ### Row constraint
 
 A row constraint is valid only if there is the same number of entries in
@@ -1175,6 +1286,15 @@ semilattice*[@levitated-lattice] with a neutral element over content type
   r         <> RowBottom = r
   RowTop    <> _         = RowTop
   _         <> RowTop    = RowTop
+```
+
+The cost of the row constraint is inferred in a similar manner
+as the cost of the record constraint:
+```{.haskell #row-constraint}
+instance TypeCost RowConstraint where
+  typeCost  RowBottom = 0
+  typeCost  RowTop    = inf
+  typeCost (Row cols) = foldMap typeCost cols
 ```
 
 ### Combining the above into a union type
@@ -1267,6 +1387,18 @@ instance UnionType `Types` Value where
               check unionArr            a
 ```
 
+Since union type is all about optionality,
+we need to sum all options from different alternatives:
+```{.haskell #union-type-instance}
+instance TypeCost UnionType where
+  typeCost UnionType {..} = typeCost unionBool
+                          + typeCost unionNull
+                          + typeCost unionNum
+                          + typeCost unionStr
+                          + typeCost unionObj
+                          + typeCost unionArr
+```
+
 ### Overlapping alternatives
 
 The essence of union type systems have long been dealing with
@@ -1330,7 +1462,7 @@ and the constraint remains a `Typelike` object:
 data Counted a =
   Counted { count      :: Int
           , constraint :: a
-          } deriving (Eq, Show)
+          } deriving (Eq, Show, Generic)
 
 instance Semigroup          a
       => Semigroup (Counted a) where
@@ -1344,6 +1476,15 @@ instance Monoid  a
 instance Typelike          a
       => Typelike (Counted a) where
   beyond Counted {..} = beyond constraint
+
+instance          ty  `Types` term
+      => (Counted ty) `Types` term where
+  infer term = Counted 1 $ infer term
+  check (Counted _ ty) term = check ty term
+
+instance TypeCost          ty
+      => TypeCost (Counted ty) where
+  typeCost (Counted _ ty) = typeCost ty
 ```
 
 We can interconnect `Counted` as parametric functor to select constraints to
@@ -1524,6 +1665,7 @@ Bibliography {#bibliography .unnumbered}
 {-# language DeriveGeneric          #-}
 {-# language DuplicateRecordFields  #-}
 {-# language FlexibleInstances      #-}
+{-# language GeneralizedNewtypeDeriving #-}
 {-# language MultiParamTypeClasses  #-}
 {-# language NamedFieldPuns         #-}
 {-# language PartialTypeSignatures  #-}
@@ -1532,7 +1674,7 @@ Bibliography {#bibliography .unnumbered}
 {-# language RoleAnnotations        #-}
 {-# language ViewPatterns           #-}
 {-# language RecordWildCards        #-}
-{-# ghc_option  -fno-orphans        #-}
+{-# options_ghc -fno-warn-orphans   #-}
 module Unions where
 
 import           Control.Arrow(second)
@@ -1564,6 +1706,7 @@ import           Data.Typeable
 <<union-type-instance>>
 <<type>>
 <<counted>>
+<<typecost>>
 
 <<missing>>
 ```
@@ -1624,6 +1767,13 @@ instance LessArbitrary Value where
               , Bool   <$> lessArbitrary
               , Number <$> lessArbitrary
               ]
+
+instance LessArbitrary          a
+      => LessArbitrary (Counted a) where
+  
+instance LessArbitrary a
+      => Arbitrary     (Counted a) where
+  arbitrary = fasterArbitrary
 
 instance Arbitrary Object where
   arbitrary = fasterArbitrary
@@ -1709,6 +1859,12 @@ instance Arbitrary (FreeType Value) where
   {-shrink  Full           = []
   shrink (FreeType elts) = map FreeType
                          $ shrink elts-}
+
+instance (Ord               v
+         ,Show              v)
+      => TypeCost (FreeType v) where
+  typeCost  Full        = inf
+  typeCost (FreeType s) = TyCost $ Set.size s
 
 instance (Eq                      a
          ,Ord                     a
@@ -1813,10 +1969,10 @@ allSpec = describe (nameOf @ty) $ do
 
 <<typelike-spec>>
 <<types-spec>>
+<<typecost-laws>>
 
 main = do
   putStrLn "NumberConstraint"
-  --quickCheck $ shrinkCheck @NumberConstraint
   sample $ arbitrary @Value
   sample $ arbitrary @NullConstraint
   sample $ arbitrary @NumberConstraint
@@ -1827,17 +1983,18 @@ main = do
   sample $ arbitrary @ObjectConstraint
 
   lawsCheckMany 
-    [typesSpec (Proxy :: Proxy (FreeType Value) ) (Proxy :: Proxy Value     )
-    ,typesSpec (Proxy :: Proxy NumberConstraint ) (Proxy :: Proxy Scientific)
-    ,typesSpec (Proxy :: Proxy StringConstraint ) (Proxy :: Proxy Text.Text )
-    ,typesSpec (Proxy :: Proxy BoolConstraint   ) (Proxy :: Proxy Bool      )
-    ,typesSpec (Proxy :: Proxy NullConstraint   ) (Proxy :: Proxy ()        )
-    ,typesSpec (Proxy :: Proxy RowConstraint    ) (Proxy :: Proxy Array     ) -- Eq loops
-    ,typesSpec (Proxy :: Proxy ArrayConstraint  ) (Proxy :: Proxy Array     )
-    ,typesSpec (Proxy :: Proxy MappingConstraint) (Proxy :: Proxy Object    ) -- loops
-    ,typesSpec (Proxy :: Proxy RecordConstraint ) (Proxy :: Proxy Object    ) -- loops
-    ,typesSpec (Proxy :: Proxy ObjectConstraint ) (Proxy :: Proxy Object    )
-    ,typesSpec (Proxy :: Proxy UnionType        ) (Proxy :: Proxy Value     )
+    [typesSpec (Proxy :: Proxy (FreeType Value) ) (Proxy :: Proxy Value     ) True
+    ,typesSpec (Proxy :: Proxy NumberConstraint ) (Proxy :: Proxy Scientific) True
+    ,typesSpec (Proxy :: Proxy StringConstraint ) (Proxy :: Proxy Text.Text ) True
+    ,typesSpec (Proxy :: Proxy BoolConstraint   ) (Proxy :: Proxy Bool      ) True
+    ,typesSpec (Proxy :: Proxy NullConstraint   ) (Proxy :: Proxy ()        ) True
+    ,typesSpec (Proxy :: Proxy RowConstraint    ) (Proxy :: Proxy Array     ) True
+    ,typesSpec (Proxy :: Proxy ArrayConstraint  ) (Proxy :: Proxy Array     ) True
+    ,typesSpec (Proxy :: Proxy MappingConstraint) (Proxy :: Proxy Object    ) True
+    ,typesSpec (Proxy :: Proxy RecordConstraint ) (Proxy :: Proxy Object    ) True
+    ,typesSpec (Proxy :: Proxy ObjectConstraint ) (Proxy :: Proxy Object    ) True
+    ,typesSpec (Proxy :: Proxy UnionType        ) (Proxy :: Proxy Value     ) True
+    ,typesSpec (Proxy :: Proxy (Counted NumberConstraint)) (Proxy :: Proxy Scientific     ) False
     ]
 
 typesSpec :: (Typeable  ty
@@ -1851,21 +2008,27 @@ typesSpec :: (Typeable  ty
              ,Eq           term
              ,Typelike  ty
              ,Types     ty term
+             ,TypeCost  ty
              )
           =>  Proxy     ty
           ->  Proxy        term
+          ->  Bool -- idempotent?
           -> (String, [Laws])
-typesSpec (tyProxy :: Proxy ty) (termProxy :: Proxy term) =
+typesSpec (tyProxy :: Proxy ty) (termProxy :: Proxy term) isIdem =
   (nameOf @ty <> " types " <> nameOf @term, [
       arbitraryLaws         tyProxy
     , eqLaws                tyProxy
     , monoidLaws            tyProxy
     , commutativeMonoidLaws tyProxy
+    , typeCostLaws          tyProxy
     , typelikeLaws          tyProxy
     , arbitraryLaws                 termProxy
     , eqLaws                        termProxy
     , typesLaws             tyProxy termProxy 
-    ])
+    ]<>idem)
+  where
+    idem | isIdem    = [idempotentSemigroupLaws tyProxy]
+         | otherwise = []
 
 typesLaws :: (          ty `Types` term
              ,Arbitrary ty
