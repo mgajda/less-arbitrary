@@ -1,4 +1,4 @@
-## ------ language="YAML" file="package.yaml" project://towards-better-union.md#2195
+## ------ language="YAML" file="package.yaml" project://towards-better-union.md#2220
 
 name: union-types
 version: '0.1.0.0'
@@ -51,6 +51,7 @@ tests:
       - hashable
       - quickcheck-classes
       - file-embed
+      - bytestring
   less-arbitrary:
     main: LessArbitrary.hs
     source-dirs:
