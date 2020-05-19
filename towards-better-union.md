@@ -352,6 +352,7 @@ data Example {
   , previous   :: String
   }
 ```
+
 ```{.haskell #representation-examples .hidden }
 example6_values :: [Value]
 example6_values = [fromJust $ decodeStrict $(embedFile "test/example6.json")]
@@ -1836,7 +1837,7 @@ import qualified Data.Vector         as Vector
 import qualified Data.Text           as Text
 import qualified Data.Text.Encoding  as Text
 import qualified Data.ByteString.Char8 as BS
-import Control.Monad(replicateM)
+import Control.Monad(replicateM, when)
 import Data.FileEmbed
 import Data.Maybe
 import Data.Scientific
@@ -1858,6 +1859,7 @@ import Test.Validity.Shrinking.Property
 import Test.Validity.Utils(nameOf)
 import qualified GHC.Generics as Generic
 import Test.QuickCheck.Classes
+import System.Exit(exitFailure)
 
 import Test.Arbitrary
 import Test.LessArbitrary as LessArbitrary
@@ -2205,13 +2207,17 @@ readJSON = fromMaybe ("Error reading JSON file")
     notComment  _                           = True
 
 representationSpec = do
-  representationTest "1a" example1a_values example1a_repr 
-  representationTest "1b" example1b_values example1b_repr 
-  representationTest "1c" example1c_values example1c_repr 
-  representationTest "2"  example2_values  example2_repr 
-  representationTest "3"  example3_values  example3_repr 
-  representationTest "4"  example4_values  example4_repr 
-  representationTest "5"  example5_values  example5_repr 
+  b <- sequence
+    [representationTest "1a" example1a_values example1a_repr
+    ,representationTest "1b" example1b_values example1b_repr
+    ,representationTest "1c" example1c_values example1c_repr
+    ,representationTest "2"  example2_values  example2_repr
+    ,representationTest "3"  example3_values  example3_repr
+    ,representationTest "4"  example4_values  example4_repr
+    ,representationTest "5"  example5_values  example5_repr
+    ,representationTest "6"  example6_values  example6_repr]
+  when (not $ and b) $
+    exitFailure
 ```
 
 # Appendix: package dependencies {#appendix-package-dependencies .unnumbered}
