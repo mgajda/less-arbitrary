@@ -2113,6 +2113,7 @@ main = do
     ,typesSpec (Proxy :: Proxy (Counted NumberConstraint))
                (Proxy :: Proxy Scientific     ) False
     ]
+  representationSpec
 
 typesSpec :: (Typeable  ty
              ,Typeable     term
@@ -2170,6 +2171,22 @@ typesLaws (_ :: Proxy ty) (_ :: Proxy term) =
                ]
 
 <<representation-examples>>
+
+representationTest name values repr = do
+    if toHType inferredType == repr
+       then putStrLn $ "Representation test " <> name <> " succeeded."
+       else do
+         putStrLn $ "Representation test failed: "
+         putStrLn $ "Values              : " <> show values
+         putStrLn $ "Inferred type       : " <> show inferredType
+         putStrLn $ "Representation found: " <> show $ toHType inferredType
+         putStrLn $ "Expected            : " <> show   repr
+  where
+    inferredType = foldMap infer values
+
+representationSpec = do
+  representationTest "1a" example1a_values example1a_repr 
+
 ```
 
 # Appendix: package dependencies {#appendix-package-dependencies .unnumbered}
