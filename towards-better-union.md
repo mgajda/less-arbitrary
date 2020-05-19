@@ -516,9 +516,7 @@ Languages with dynamic type discipline will treat `beyond` as untyped,
 dynamic value, and `mempty` again is a fully unknown, polymorphic value (like a type of an element of an empty array)[^8].
 
 ``` {#typelike .haskell}
-class (Monoid   t
-      ,Eq       t
-      ,Show     t)
+class (Monoid t, Eq t,Show t)
    =>  Typelike t where
    beyond :: t -> Bool
 ```
@@ -533,13 +531,16 @@ In other words the `beyond` set is an attractor of `<>` on both sides [^10].
 Concerning union types, the key property of the `beyond` set, is that it is closed to
 information acquisition:
 
-``` {.haskell #typelike-spec}
+``` {.haskell #typelike-spec .hidden}
 beyond_is_closed :: forall   ty.
                     Typelike ty
                  => ty -> ty -> Property
+```
+``` {.haskell #typelike-spec}
 beyond_is_closed ty1 ty2 = do
   beyond (ty1 :: ty) ==> beyond (ty1 <> ty2)
-
+```
+```{.haskell #typelike-spec .hidden}
 typelikeLaws :: (Arbitrary a
                 ,Typelike  a)
              =>  Proxy     a
@@ -609,13 +610,15 @@ terms by these valid types.
 First, we note that to describe *no information*, `mempty` cannot
 correctly type any term:
 
-``` {#types-spec .haskell}
+``` {#types-spec .haskell .hidden}
 mempty_contains_no_terms
   :: forall    ty term.
      (Typelike ty
      ,Types    ty term)
   =>              term
   -> Bool
+```
+``` {#types-spec .haskell}
 mempty_contains_no_terms term =
       check (mempty :: ty) term
         == False
@@ -624,7 +627,7 @@ mempty_contains_no_terms term =
 Second important rule of typing is that all terms are typed successfully by any
 value in the `beyond` set.
 
-``` {#types-spec .haskell}
+``` {#types-spec .haskell .hidden}
 beyond_contains_all_terms :: forall ty    term.
                             (Types  ty    term
                             ,Show         term)
@@ -682,11 +685,13 @@ The last law states that the terms are correctly typechecked
 after adding more information into a single type.
 (For inference relation, it would be described as _principal type property_.)
 
-``` {#types-spec .haskell}
+``` {#types-spec .haskell .hidden}
 fusion_keeps_terms :: forall   ty v.
                      (Typelike ty
                      ,ty `Types` v)
                    => v -> ty -> ty -> Property
+```
+``` {#types-spec .haskell}
 fusion_keeps_terms v ty1 ty2 = do
   check ty1 v || check ty2 v ==>
     check (ty1 <> ty2) v
@@ -1064,8 +1069,9 @@ inf = 100000000
 ```
 
 Type cost should be non-negative, and non-decreasing when we add new
-observations to the type:
-```{.haskell #typecost-laws}
+observations to the type.
+
+```{.haskell #typecost-laws .hidden}
 prop_typeCost_is_non_negative :: TypeCost ty
                               => ty -> Bool
 prop_typeCost_is_non_negative ty =
@@ -1384,7 +1390,7 @@ instance Semigroup RowConstraint where
 
 In other words, `RowConstraint` is a *levitated
 semilattice* with a neutral element [@levitated-lattice] over the content type
-of `[UnionType]`.
+that is a list of `UnionType` objects.
 
 ``` {#row-constraint-standard-rules .haskell .hidden}
   RowNever <> r        = r
@@ -1430,7 +1436,7 @@ instance Semigroup UnionType where
     }
 ```
 
-```{.haskell #type}
+```{.haskell #type .hidden}
 instance Show UnionType where
   showsPrec _ UnionType {..} =
       showString "UnionType {"
@@ -1530,11 +1536,9 @@ we need to sum all options from different alternatives:
 ```{.haskell #union-type-instance}
 instance TypeCost UnionType where
   typeCost UnionType {..} = typeCost unionBool
-                          + typeCost unionNull
-                          + typeCost unionNum
-                          + typeCost unionStr
-                          + typeCost unionObj
-                          + typeCost unionArr
+    + typeCost unionNull + typeCost unionNum
+    + typeCost unionStr  + typeCost unionObj
+    + typeCost unionArr
 ```
 
 ### Overlapping alternatives
