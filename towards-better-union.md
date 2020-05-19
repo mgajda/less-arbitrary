@@ -54,7 +54,7 @@ Introduction
 Typing dynamic languages has been long considered a challenge
 [@javascript-inference]. The importance of the task grown with
 ubiquity cloud application programming
-interfaces (APIs) using JavaScript object notation (JSON),
+interfaces (APIs) utilizing JavaScript object notation (JSON),
 where one needs to infer the structure having only a limited number of sample documents available.
 
 Previous research have suggested it is possible to infer adequate type mappings
@@ -99,7 +99,7 @@ Type systems are commonly expressed as partial relation of *typing*.
 Their properties, such as subject reduction are also expressed relatively to the relation (also
 partial) of *reduction* within a term rewriting system.
 
-General formulations have been introduced for the Hindley-Milner
+General formulations have been introduced for the Damas-Milner
 type systems parameterized by constraints [@HM-X,@Jones].
 
 We are not aware of any attempts to formulate general laws that would
@@ -108,7 +108,7 @@ no previous formulation exists that consider complete relations or functions in 
 provide consistent mathematical descriptions where terms
 stray beyond their desired types[^1].
 
-It is also worth noting that traditional Hindley-Milner type disciplines embrace the laws of soundness,
+It is also worth noting that traditional Damas-Milner type disciplines embrace the laws of soundness,
 and subject-reduction.
 However these laws often prove too strict during type system extension,
 and are abandoned in practice of larger systems[@GHCZurihac].
@@ -129,6 +129,26 @@ motivation for the present study:
 -   *API argument is an email* -- it is subset of valid `String`
     values, that can be validated on the client side.
 
+```{.json language="JSON"}
+{"example": [
+  "amy@example.com"
+  "robert@example.com"
+  ]
+}
+```
+
+```{.haskell #representation-examples}
+example1_values = String <$> [
+    "amy@example.com"
+  , "edward@example.com"
+  ]
+example1_repr = HRef "Email"
+```
+
+``` {.haskell language="Haskell" file=test/example1a.result .hidden}
+newtype Example = Example Email
+```
+
 ``` {.json language="JSON" file=test/example1a.json .hidden}
 {"message": "Where can I submit my proposal?",
     "uid" : 1014}
@@ -136,8 +156,14 @@ motivation for the present study:
    "code" : 401}
 ```
 
-``` {.haskell language="Haskell" file=test/example1a.result .hidden}
-newtype Example = Example Email
+```{.haskell #test-example}
+-- FIXME: this example belongs elsewhere!
+example1a_values :: [String]
+example1a_values  = []
+  ["{'message': 'Where can I submit my proposal?' ,'uid' : 1014}"
+  ,"{\"error\"  : \"Authorization failed\", \"code\" : 401}"]
+
+example1a_repr = HRef "Email"
 ```
 
 -   *The page size determines the number of results to return (min: 10,
@@ -155,22 +181,37 @@ newtype Example = Example Email
 newtype Example = Example [Int]
 ```
 
+```{.haskell #representation-examples .hidden }
+example1b_values = Number <$> [
+    10
+  , 10000
+  ]
+example1b_repr = HRef "Int"
+```
 -   *The `date` field contains ISO8601 date* -- a record field is represented
--   as a `String` that contains a calendar date in the format
+    as a `String` that contains a calendar date in the format
     `"2019-03-03"`
 
 ``` {.json file="test/example1c.json" .hidden}
 "2019-03-03"
+"2019-10-07"
 ```
 
-``` {.haskell file=test/example1c.result .hidden}
+``` {.haskell file=test/example1c.result .hidden }
 newtype Example = Example Date
 ```
 
-1.  Optional fields:
+```{.haskell #representation-examples .hidden }
+example1c_values = String <$> [
+    "2019-03-03"
+  , "2019-10-07"
+  ]
+example1c_repr = HRef "Date"
+```
+2.  Optional fields:
 
 -   *The page size is equal to 100 by default* - it means we have
--   a record `{"page_size": 50}`
+    a record `{"page_size": 50}`
     or an empty record that should be interpreted as default value `{}`
 
 ``` {.json file=test/example2.json .hidden}
@@ -180,6 +221,19 @@ newtype Example = Example Date
 
 ```{.haskell file=test/example2.result .hidden}
 newtype Example = Example { page_size :: Maybe Int }
+```
+
+```{.haskell #representation-examples .hidden }
+example2_values :: [Value]
+example2_values = fromJust . decodeStrict <$> [
+    "{}"
+  , "{\"page_size\": 50}"
+  ]
+example2_repr = HADT [
+    HCons "" [
+      ("page_size", HApp "Maybe" ["Int"])
+    ]
+  ]
 ```
 
 3.  Variant fields:
@@ -196,6 +250,14 @@ newtype Example = Example { page_size :: Maybe Int }
 newtype Example = Example (String :|: Int)
 ```
 
+```{.haskell #representation-examples .hidden }
+example3_values = [
+    String "alpha"
+  , Number 10
+  ]
+example3_repr =
+  HApp ":|:" [HRef "String", HRef "Int"]
+```
 4.  Variant records:
 
 -   *Answer contains either a text message with an user id, or an error.* --
@@ -207,6 +269,23 @@ newtype Example = Example (String :|: Int)
 {"error"   : "Authorization failed",            "code" :  401}
 {"error"   : "User not found",                  "code" :  404}
 ```
+
+```{.haskell #representation-examples .hidden }
+example4_values :: [Value]
+example4_values = fromJust . decodeStrict <$> [
+    "{\"message\" : \"Where can I submit my proposal?\", \"uid\"  : 1014}"
+  , "{\"message\" : \"Submit it to HotCRP\",             \"uid\"  :  317}"
+  , "{\"error\"   : \"Authorization failed\",            \"code\" :  401}"
+  , "{\"error\"   : \"User not found\",                  \"code\" :  404}"
+  ]
+example4_repr = HADT [
+    HCons "" [("message", HRef "String")
+             ,("uid",     HRef "Int"   )]
+  , HCons "" [("error",   HRef "String")
+             ,("code",    HRef "Int"   )]
+  ]
+```
+
 
 5.  Arrays corresponding to records[^2]:
 
@@ -228,6 +307,15 @@ data Example = Example {
   }
 ```
 
+```{.haskell #representation-examples .hidden }
+example5_values :: [Value]
+example5_values = [fromJust $ decodeStrict $(embedFile "test/example5.json")]
+example5_repr = HADT [
+    HCons "" [("", HRef "Int"   )
+             ,("", HRef "String")
+             ,("", HRef "Date"  )]
+  ]
+```
 6.  Maps of identical objects[^3]:
 
 ``` {.json file=test/example6.json}
@@ -262,6 +350,20 @@ data Example {
   , difficulty :: Double
   , previous   :: String
   }
+```
+```{.haskell #representation-examples .hidden }
+example6_value :: [Value]
+example6_value = [fromJust $ decodeStrict $(embedFile "test/example6.json")]
+  
+example6_repr = HApp
+     "Map"
+    ["String"
+    ,HADT [
+     HCons "" [("size",       HRef "Int"   )
+              ,("height",     HRef "Int"   )
+              ,("difficulty", HRef "Double")
+              ,("previous",   HRef "String")]
+    ]]
 ```
 
 ::: {#example:nonmonotonic-inference}
@@ -438,7 +540,7 @@ typelikeLaws (Proxy :: Proxy a) =
       property $ beyond_is_closed @a)]
 ```
 
-(We describe laws as QuickCheck[@quickcheck] properties so that unit
+(We describe laws as QuickCheck properties~[@quickcheck] so that unit
 testing can detect obvious violations.)
 
 In this way, we can specify other elements of `beyond` set instead of a single `top`.
@@ -469,7 +571,7 @@ assumed for type constraints here[@subtyping-lattice].
 
 That is because this requirement is valid only for strict type
 constraint inference, not for a more general type inference as a
-learning problem. As we saw in the example @example:row-constraint, we
+learning problem. As we saw in the example @lst:row-constraint, we
 need non-monotonic inference when dealing with alternative
 representations.
 
@@ -582,7 +684,7 @@ fusion_keeps_terms v ty1 ty2 = do
 
 The minimal `Typelike` instance is the one that contains only `mempty`
 corresponding to the case of *no sample data received*, and a single `beyond` element for *all values permitted*.
-We will define it below as `PresenceConstraint`[@sec:presence-absence-constraints].
+We will define it below as `PresenceConstraint` in [@sec:presence-absence-constraints].
 
 It should be noted that these laws are still compatible with the strict, static type
 discipline: namely the `beyond` set corresponds to a set of constrants with at least one
@@ -673,8 +775,11 @@ data NumberConstraint =
   deriving(Eq,Show,Generic)
 
 instance Semigroup NumberConstraint where
-  <<standard-rules-number-constraint>>
-  NCInt <> NCInt = NCInt
+  NCFloat <> _       = NCFloat
+  _       <> NCFloat = NCFloat
+  NCNever <> a       = a
+  a       <> NCNever = a
+  NCInt   <> NCInt   = NCInt
 
 instance Typelike NumberConstraint where
   beyond = (==NCFloat)
@@ -687,21 +792,9 @@ instance NumberConstraint `Types` Scientific where
   check NCInt   sci = base10Exponent sci >= 0
   check NCNever sci = False
 
-<<standard-instances-number-constraint>>
-```
-
-``` {#standard-rules-number-constraint .haskell}
-NCFloat <> _       = NCFloat
-_       <> NCFloat = NCFloat
-NCNever <> a       = a
-a       <> NCNever = a
-```
-
-``` {#standard-instances-number-constraint .haskell .hidden}
 instance Monoid NumberConstraint where
   mempty = NCNever
 ```
-
 
 #### Constraints on string type
 
@@ -717,8 +810,7 @@ data StringConstraint =
 instance StringConstraint `Types` Text where
   infer (isValidDate  -> True) = SCDate
   infer (isValidEmail -> True) = SCEmail
-  infer  value                 = SCEnum $
-                      Set.singleton value
+  infer value = SCEnum $ Set.singleton value
 
   check  SCDate     s = isValidDate  s
   check  SCEmail    s = isValidEmail s
@@ -841,7 +933,6 @@ type BoolConstraint = PresenceConstraint Bool
 
 Note that booleans and `null` values are both denoted by this trivial
 `PresenceConstraint` constraint.
-
 The same is valid for `null` values, as there is only one `null` value.
 
 ``` {#presence-absence-constraints .haskell}
@@ -937,11 +1028,9 @@ class Typelike ty
   typeCost a | a == mempty = 0
              | otherwise   = 1
 
-instance Semigroup TyCost where
-  (<>) = (+)
+instance Semigroup TyCost where (<>) = (+)
 
-instance Monoid TyCost where
-  mempty = 0
+instance Monoid    TyCost where mempty = 0
 ```
 
 When presented with several alternate representations
@@ -1052,8 +1141,9 @@ Cost of mapping representation is a sum of cost of its fields:
 ```{.haskell #object-constraint}
 instance TypeCost MappingConstraint where
   typeCost MappingNever           = 0
-  typeCost MappingConstraint {..} = typeCost keyConstraint
-                                  + typeCost valueConstraint
+  typeCost MappingConstraint {..} =
+      typeCost keyConstraint
+    + typeCost valueConstraint
 ```
 
 Separately, we acquire the information about
@@ -1169,7 +1259,6 @@ instance TypeCost ObjectConstraint where
     typeCost recordCase
 ```
 
-
 ### Array constraint
 
 Similarly to the object type, `ArrayConstraint` is used to simultaneously
@@ -1185,7 +1274,7 @@ the union type to Haskell declaration.
 
 Here, we specify the records for two different possible representations:
 
-``` {#array-constraint .haskell}
+``` {.haskell #array-constraint}
 data ArrayConstraint  = ArrayConstraint {
     arrayCase :: UnionType
   , rowCase   :: RowConstraint
@@ -1248,7 +1337,7 @@ whenever there is an uneven number of columns.
 ``` {#row-constraint .haskell}
 data RowConstraint =
      RowTop
-   | RowBottom
+   | RowNever
    | Row       [UnionType]
    deriving (Eq,Show,Generic)
 
@@ -1256,14 +1345,14 @@ instance Typelike RowConstraint where
   beyond = (==RowTop)
 
 instance Monoid RowConstraint where
-  mempty = RowBottom
+  mempty = RowNever
 
 instance RowConstraint `Types` Array where
   infer = Row
         . Foldable.toList
         . fmap infer
-  check RowTop    _ = True
-  check RowBottom _ = False
+  check RowTop   _ = True
+  check RowNever _ = False
   check (Row rs) vs
     | length rs == length vs =
       and $
@@ -1274,8 +1363,8 @@ instance RowConstraint `Types` Array where
 instance Semigroup RowConstraint where
   RowTop    <> _             = RowTop
   _         <> RowTop        = RowTop
-  RowBottom <> a             = a
-  a         <> RowBottom     = a
+  RowNever  <> a             = a
+  a         <> RowNever      = a
   Row bs    <> Row cs
     | length bs /= length cs = RowTop
   Row bs    <> Row cs        =
@@ -1283,21 +1372,21 @@ instance Semigroup RowConstraint where
 ```
 
 In other words, `RowConstraint` is a *levitated
-semilattice*[@levitated-lattice] with a neutral element over content type
-`[UnionType]`.
+semilattice* with a neutral element [@levitated-lattice] over the content type
+of `[UnionType]`.
 
 ``` {#row-constraint-standard-rules .haskell .hidden}
-  RowBottom <> r         = r
-  r         <> RowBottom = r
-  RowTop    <> _         = RowTop
-  _         <> RowTop    = RowTop
+  RowNever <> r        = r
+  r        <> RowNever = r
+  RowTop   <> _        = RowTop
+  _        <> RowTop   = RowTop
 ```
 
 The cost of the row constraint is inferred in a similar manner
 as the cost of the record constraint:
 ```{.haskell #row-constraint}
 instance TypeCost RowConstraint where
-  typeCost  RowBottom = 0
+  typeCost  RowNever  = 0
   typeCost  RowTop    = inf
   typeCost (Row cols) = foldMap typeCost cols
 ```
@@ -1512,7 +1601,7 @@ To preserve efficiency, we may need to merge whenever the number of
 alternatives in a multiset crosses the threshold. [^16] We can attempt to
 narrow strings only in the cases when cardinality crosses the threshold [^17].
 
-# Selecting representations
+# Selecting representations {#sec:select-representation}
 
 Specifying heuristics to achieve better types
 ---------------------------------------------
@@ -1525,7 +1614,7 @@ It should be noted that these assumptions may bypass the defined
 least-upper-bound criterion specified in the initial part of the paper; however,
 they prove to work well in practice.
 
-### Array type with no element observations
+### Promoting empty type
 
 If we have no observations corresponding to an array type, it can be
 inconvenient to disallow an array to contain any values at all.
@@ -1663,9 +1752,9 @@ Bibliography {#bibliography .unnumbered}
 ::: {#refs}
 :::
 
-# Appendix: module headers {#appendix-module-headers .unnumbered}
+# Appendix: definition module headers {#appendix-module-headers .unnumbered}
 
-```{.haskell .hidden language="Haskell" file=src/Unions.hs}
+```{.haskell language="Haskell" file=src/Unions.hs}
 {-# language AllowAmbiguousTypes    #-}
 {-# language DeriveGeneric          #-}
 {-# language DuplicateRecordFields  #-}
@@ -1679,6 +1768,7 @@ Bibliography {#bibliography .unnumbered}
 {-# language RoleAnnotations        #-}
 {-# language ViewPatterns           #-}
 {-# language RecordWildCards        #-}
+{-# language OverloadedStrings      #-}
 {-# options_ghc -fno-warn-orphans   #-}
 module Unions where
 
@@ -1694,6 +1784,7 @@ import qualified Text.Email.Validate(isValid)
 import qualified Data.Set  as Set
 import           Data.Set(Set)
 import           Data.Scientific
+import           Data.String
 import           Data.List(sortBy)
 import qualified Data.HashMap.Strict as Map
 import           Data.HashMap.Strict(HashMap)
@@ -1712,31 +1803,39 @@ import           Data.Typeable
 <<type>>
 <<counted>>
 <<typecost>>
+<<representation>>
 
 <<missing>>
 ```
 
-```{.haskell .hidden file=test/spec/Spec.hs}
+# Appendix: test suite {.unnumbered}
+
+```{.haskell file=test/spec/Spec.hs}
 {-# language FlexibleInstances     #-}
 {-# language Rank2Types            #-}
 {-# language MultiParamTypeClasses #-}
 {-# language NamedFieldPuns        #-}
 {-# language ScopedTypeVariables   #-}
 {-# language StandaloneDeriving    #-}
+{-# language TemplateHaskell       #-}
 {-# language TypeOperators         #-}
 {-# language TypeApplications      #-}
 {-# language TupleSections         #-}
 {-# language UndecidableInstances  #-}
 {-# language AllowAmbiguousTypes   #-}
-{-# ghc_option  -fno-orphans        #-}
+{-# language OverloadedStrings     #-}
+{-# ghc_option  -fno-orphans       #-}
 module Main where
 
+import Data.String(IsString(..))
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Set            as Set
 import qualified Data.Vector         as Vector
 import qualified Data.Text           as Text
 import qualified Data.Text.Encoding  as Text
 import Control.Monad(replicateM)
+import Data.FileEmbed
+import Data.Maybe
 import Data.Scientific
 import Data.Aeson
 import Data.Proxy
@@ -1809,8 +1908,9 @@ instance ArbitraryBeyond RecordConstraint where
   arbitraryBeyond = pure RCTop
 
 instance ArbitraryBeyond MappingConstraint where
-  arbitraryBeyond = MappingConstraint <$$$> arbitraryBeyond
-                                       <*>  arbitraryBeyond
+  arbitraryBeyond =
+    MappingConstraint <$$$> arbitraryBeyond
+                       <*>  arbitraryBeyond
 
 instance (Ord                      a
          ,Show                     a
@@ -1988,18 +2088,30 @@ main = do
   sample $ arbitrary @ObjectConstraint
 
   lawsCheckMany 
-    [typesSpec (Proxy :: Proxy (FreeType Value) ) (Proxy :: Proxy Value     ) True
-    ,typesSpec (Proxy :: Proxy NumberConstraint ) (Proxy :: Proxy Scientific) True
-    ,typesSpec (Proxy :: Proxy StringConstraint ) (Proxy :: Proxy Text.Text ) True
-    ,typesSpec (Proxy :: Proxy BoolConstraint   ) (Proxy :: Proxy Bool      ) True
-    ,typesSpec (Proxy :: Proxy NullConstraint   ) (Proxy :: Proxy ()        ) True
-    ,typesSpec (Proxy :: Proxy RowConstraint    ) (Proxy :: Proxy Array     ) True
-    ,typesSpec (Proxy :: Proxy ArrayConstraint  ) (Proxy :: Proxy Array     ) True
-    ,typesSpec (Proxy :: Proxy MappingConstraint) (Proxy :: Proxy Object    ) True
-    ,typesSpec (Proxy :: Proxy RecordConstraint ) (Proxy :: Proxy Object    ) True
-    ,typesSpec (Proxy :: Proxy ObjectConstraint ) (Proxy :: Proxy Object    ) True
-    ,typesSpec (Proxy :: Proxy UnionType        ) (Proxy :: Proxy Value     ) True
-    ,typesSpec (Proxy :: Proxy (Counted NumberConstraint)) (Proxy :: Proxy Scientific     ) False
+    [typesSpec (Proxy :: Proxy (FreeType Value) )
+               (Proxy :: Proxy Value     ) True
+    ,typesSpec (Proxy :: Proxy NumberConstraint )
+               (Proxy :: Proxy Scientific) True
+    ,typesSpec (Proxy :: Proxy StringConstraint )
+               (Proxy :: Proxy Text.Text ) True
+    ,typesSpec (Proxy :: Proxy BoolConstraint   )
+               (Proxy :: Proxy Bool      ) True
+    ,typesSpec (Proxy :: Proxy NullConstraint   )
+               (Proxy :: Proxy ()        ) True
+    ,typesSpec (Proxy :: Proxy RowConstraint    )
+               (Proxy :: Proxy Array     ) True
+    ,typesSpec (Proxy :: Proxy ArrayConstraint  )
+               (Proxy :: Proxy Array     ) True
+    ,typesSpec (Proxy :: Proxy MappingConstraint)
+               (Proxy :: Proxy Object    ) True
+    ,typesSpec (Proxy :: Proxy RecordConstraint )
+               (Proxy :: Proxy Object    ) True
+    ,typesSpec (Proxy :: Proxy ObjectConstraint )
+               (Proxy :: Proxy Object    ) True
+    ,typesSpec (Proxy :: Proxy UnionType        )
+               (Proxy :: Proxy Value     ) True
+    ,typesSpec (Proxy :: Proxy (Counted NumberConstraint))
+               (Proxy :: Proxy Scientific     ) False
     ]
 
 typesSpec :: (Typeable  ty
@@ -2019,7 +2131,8 @@ typesSpec :: (Typeable  ty
           ->  Proxy        term
           ->  Bool -- idempotent?
           -> (String, [Laws])
-typesSpec (tyProxy :: Proxy ty) (termProxy :: Proxy term) isIdem =
+typesSpec (tyProxy   :: Proxy ty)
+          (termProxy :: Proxy term) isIdem =
   (nameOf @ty <> " types " <> nameOf @term, [
       arbitraryLaws         tyProxy
     , eqLaws                tyProxy
@@ -2046,12 +2159,17 @@ typesLaws :: (          ty `Types` term
           -> Laws
 typesLaws (_ :: Proxy ty) (_ :: Proxy term) =
   Laws "Types" [("mempty contains no terms"
-                ,property $ mempty_contains_no_terms        @ty @term)
+                ,property $
+                  mempty_contains_no_terms        @ty @term)
                ,("beyond contains all terms"
-                ,property $ beyond_contains_all_terms       @ty @term)
+                ,property $
+                  beyond_contains_all_terms       @ty @term)
                ,("inferred type contains its term"
-                ,property $ inferred_type_contains_its_term @ty @term)
+                ,property $
+                  inferred_type_contains_its_term @ty @term)
                ]
+
+<<representation-examples>>
 ```
 
 # Appendix: package dependencies {#appendix-package-dependencies .unnumbered}
@@ -2107,6 +2225,7 @@ tests:
       - transformers
       - hashable
       - quickcheck-classes
+      - file-embed
   less-arbitrary:
     main: LessArbitrary.hs
     source-dirs:
@@ -2122,42 +2241,197 @@ tests:
       - quickcheck-instances
 ```
 
-Appendix: Hindley-Milner as `Typelike` {#appendix-hindley-milner-as-typelike .unnumbered}
+Appendix: representation of generated Haskell types {.unnumbered}
 ======================================
+
+We will not delve here into identifier conversion
+between JSON and Haskell, so it suffices that we
+have an abstract datatypes for Haskell type and constructor identifiers:
+
+```{.haskell #representation}
+newtype HConsId  = HConsId String
+  deriving (Eq,Ord,Show,Generic,IsString)
+newtype HFieldId = HFieldId String
+  deriving (Eq,Ord,Show,Generic,IsString)
+newtype HTypeId  = HTypeId String
+  deriving (Eq,Ord,Show,Generic,IsString)
+```
+
+For each single type we will either describe its exact representation or
+reference to the other definition by name:
+```{.haskell #representation}
+data HType =
+    HRef HTypeId
+  | HApp HTypeId [HType]
+  | HADT [HCons]
+  deriving (Eq, Ord, Show, Generic)
+```
+
+For syntactic convenience, we will allow string literals
+to denote type references:
+```{.haskell #representation}
+instance IsString HType where
+  fromString = HRef . fromString
+```
+
+When we define a single constructor,
+we allow field and constructor names to be empty strings (`""`),
+assuming that the relevant identifiers will be put there
+by post-processing that will pick names using types of fields
+and their containers[@xml-typelift].
+```{.haskell #representation}
+data HCons = HCons {
+              name ::  HConsId
+            , args :: [(HFieldId, HType)]
+            }
+  deriving (Eq, Ord, Show, Generic)
+```
+
+At some stage we want to split representation into individually named declarations,
+and then we use environment of defined types, with an explicitly named
+toplevel type:
+```{.haskell #representation}
+data HTypeEnv = HTypeEnv {
+    toplevel :: HTypeId
+  , env      :: HashMap HTypeId HType
+  }
+```
+
+When checking for validity of types and type environments,
+we might need a list of predefined identifiers that are imported:
+```{.haskell #representation}
+predefinedHTypes :: [HType]
+predefinedHTypes = [
+    "Data.Aeson.Value"
+  , "()"
+  , "Double"
+  , "String"
+  , "Int"
+  , "Date" -- actually: "Data.Time.CalendarDay"
+  , "Email" -- actually: "Data.Email"
+  ]
+```
+
+Consider that we also have an `htop` value that represents any possible JSON value.
+It is polimorphic for ease of use:
+
+```{.haskell #representation}
+htop :: IsString s => s
+htop = "Data.Aeson.Value"
+```
+
+
+Code for selecting representation
+---------------------------------
+Below is the code to select representation, as described in [@sec:select-representation].
+
+To convert union type discipline to strict Haskell type representations,
+we need to join the options to get the actual representation:
+```{.haskell #representation}
+toHType :: ToHType ty => ty -> HType
+toHType arg =
+    case toHTypes arg of
+      []   -> htop -- promotion of empty type
+      alts -> foldr1 mkUnion alts
+  where
+    mkUnion a b = HApp ":|:" [a, b]
+```
+
+Considering the assembly of `UnionType`, we join all the options,
+and convert nullable types to `Maybe` types
+```{.haskell #representation}
+instance ToHType UnionType where
+  toHTypes UnionType {..} =
+      prependNullable unionNull opts
+    where
+      opts = concat [toHTypes unionBool
+                    ,toHTypes unionStr
+                    ,toHTypes unionNum
+                    ,toHTypes unionArr
+                    ,toHTypes unionObj]
+
+prependNullable Present tys = [HApp "Maybe" tys]
+prependNullable Absent  tys =               tys
+```
+
+The type class returns a list of mutually exclusive type representations:
+
+```{.haskell #representation}
+class Typelike ty
+   => ToHType  ty where
+  toHTypes :: ty -> [HType]
+```
+
+Conversion of flat types is quite straightforward:
+```{.haskell #representation}
+instance ToHType BoolConstraint where
+  toHTypes Absent  = []
+  toHTypes Present = ["Bool"]
+instance ToHType NumberConstraint where
+  toHTypes NCNever = []
+  toHTypes NCFloat = ["Double"]
+  toHTypes NCInt   = ["Int"]
+instance ToHType StringConstraint where
+  toHTypes SCAny   = ["String"]
+  toHTypes SCEmail = ["Email"]
+  toHTypes SCDate  = ["Date"]
+  toHTypes SCNever = []
+```
+
+For array and object types we pick the representation which presents the lowest cost of optionality:
+```{.haskell #representation}
+instance ToHType ObjectConstraint where
+  toHTypes ObjectConstraint {..} =
+    if typeCost recordCase <= typeCost mappingCase
+      then [toHType recordCase ]
+      else [toHType mappingCase]
+
+instance ToHType RecordConstraint where
+  toHTypes (RecordConstraint fields) =
+      [HADT
+          [HCons "" $ fmap convert $ Map.toList fields]
+      ]
+    where
+      convert (k,v) = (HFieldId $ Text.unpack k
+                      ,toHType v)
+
+instance ToHType MappingConstraint where
+  toHTypes MappingNever = []
+  toHTypes MappingConstraint {..} =
+    [HApp "Map" [toHType keyConstraint
+                ,toHType valueConstraint
+                ]]
+
+instance ToHType RowConstraint where
+  toHTypes  RowNever  = []
+  toHTypes  RowTop    = [htop]
+  toHTypes (Row cols) =
+    [HADT
+        [HCons "" $ fmap (\ut -> ("", toHType ut)) cols]
+    ]
+
+instance ToHType ArrayConstraint where
+  toHTypes ArrayConstraint {..} =
+    if   typeCost arrayCase <= typeCost rowCase
+      -- || count <= 3
+      then [toHType arrayCase]
+      else [toHType rowCase  ]
+```
 
 Appendix: Missing pieces of code {#appendix-missing-pieces-of-code .unnumbered}
 ================================
 
-``` {#missing .haskell .hidden}
--- In order to represent `FreeType` for the `Value`,
--- we need to add `Ord` instance for it:
-instance Ord       Value where
-  compare = compare `on` hash
-
-fromEnum' :: Enum a => a -> Integer
-fromEnum' = fromIntegral . fromEnum
-
-encodeConstructors :: Value -> [Integer]
-encodeConstructors  Null      = [0]
-encodeConstructors (Bool   b) = [1, fromEnum' b]
-encodeConstructors (Number n) = [2,
-        fromIntegral $ base10Exponent n,
-        coefficient n]
-encodeConstructors (String s) = 3:
-  (fromEnum' <$> Text.unpack s)
-encodeConstructors (Array  a) = 4:
-  concatMap encodeConstructors a
-encodeConstructors (Object o) =
-    concatMap encodeItem      $
-    sortBy (compare `on` fst) $
-    Map.toList o
-  where
-    encodeItem (k, v) =
-      (fromEnum' <$> Text.unpack k) <>
-      encodeConstructors v
-```
+In order to represent `FreeType` for the `Value`,
+we need to add `Ord` instance for it:
 
 ``` {#missing .haskell}
+instance Ord       Value where
+  compare = compare `on` hash
+```
+
+For validation of dates and emails, we import functions from Hackage:
+
+```{.haskell #missing}
 isValidDate :: Text -> Bool
 isValidDate = isJust
             . parseISO8601
@@ -2167,6 +2441,9 @@ isValidEmail :: Text -> Bool
 isValidEmail = Text.Email.Validate.isValid
            . Text.encodeUtf8
 ```
+
+Appendix: Damas-Milner as `Typelike` {#appendix-hindley-milner-as-typelike .unnumbered}
+======================================
 
 [^1]: Or at least beyond `bottom` expanding to *infamous undefined
     behaviour*[@undefined1,@undefined2,@undefined3].
