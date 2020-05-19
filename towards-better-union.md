@@ -137,12 +137,12 @@ motivation for the present study:
 }
 ```
 
-```{.haskell #representation-examples}
-example1_values = String <$> [
+```{.haskell #representation-examples .hiden}
+example1a_values = String <$> [
     "amy@example.com"
   , "edward@example.com"
   ]
-example1_repr = HRef "Email"
+example1a_repr = HRef "Email"
 ```
 
 ``` {.haskell language="Haskell" file=test/example1a.result .hidden}
@@ -156,14 +156,14 @@ newtype Example = Example Email
    "code" : 401}
 ```
 
-```{.haskell #test-example}
+```{.haskell #representation-examples .hidden}
 -- FIXME: this example belongs elsewhere!
-example1a_values :: [String]
-example1a_values  = []
+not_example1a_values :: [String]
+not_example1a_values  =
   ["{'message': 'Where can I submit my proposal?' ,'uid' : 1014}"
   ,"{\"error\"  : \"Authorization failed\", \"code\" : 401}"]
 
-example1a_repr = HRef "Email"
+not_example1a_repr = HRef "Email"
 ```
 
 -   *The page size determines the number of results to return (min: 10,
@@ -225,7 +225,8 @@ newtype Example = Example { page_size :: Maybe Int }
 
 ```{.haskell #representation-examples .hidden }
 example2_values :: [Value]
-example2_values = fromJust . decodeStrict <$> [
+example2_values = fromMaybe (error "failed in example2")
+                . decodeStrict <$> [
     "{}"
   , "{\"page_size\": 50}"
   ]
@@ -309,7 +310,7 @@ data Example = Example {
 
 ```{.haskell #representation-examples .hidden }
 example5_values :: [Value]
-example5_values = [fromJust $ decodeStrict $(embedFile "test/example5.json")]
+example5_values = [readJSON $(embedFile "test/example5.json")]
 example5_repr = HADT [
     HCons "" [("", HRef "Int"   )
              ,("", HRef "String")
@@ -352,8 +353,8 @@ data Example {
   }
 ```
 ```{.haskell #representation-examples .hidden }
-example6_value :: [Value]
-example6_value = [fromJust $ decodeStrict $(embedFile "test/example6.json")]
+example6_values :: [Value]
+example6_values = [fromJust $ decodeStrict $(embedFile "test/example6.json")]
   
 example6_repr = HApp
      "Map"
@@ -1769,7 +1770,7 @@ Bibliography {#bibliography .unnumbered}
 {-# language ViewPatterns           #-}
 {-# language RecordWildCards        #-}
 {-# language OverloadedStrings      #-}
-{-# options_ghc -fno-warn-orphans   #-}
+{-# options_ghc -Wno-orphans        #-}
 module Unions where
 
 import           Control.Arrow(second)
@@ -1824,7 +1825,8 @@ import           Data.Typeable
 {-# language UndecidableInstances  #-}
 {-# language AllowAmbiguousTypes   #-}
 {-# language OverloadedStrings     #-}
-{-# ghc_option  -fno-orphans       #-}
+{-# language ViewPatterns          #-}
+{-# ghc_option  -Wno-orphans       #-}
 module Main where
 
 import Data.String(IsString(..))
@@ -1833,6 +1835,7 @@ import qualified Data.Set            as Set
 import qualified Data.Vector         as Vector
 import qualified Data.Text           as Text
 import qualified Data.Text.Encoding  as Text
+import qualified Data.ByteString.Char8 as BS
 import Control.Monad(replicateM)
 import Data.FileEmbed
 import Data.Maybe
@@ -2087,6 +2090,7 @@ main = do
   sample $ arbitrary @MappingConstraint
   sample $ arbitrary @ObjectConstraint
 
+  representationSpec
   lawsCheckMany 
     [typesSpec (Proxy :: Proxy (FreeType Value) )
                (Proxy :: Proxy Value     ) True
@@ -2113,7 +2117,6 @@ main = do
     ,typesSpec (Proxy :: Proxy (Counted NumberConstraint))
                (Proxy :: Proxy Scientific     ) False
     ]
-  representationSpec
 
 typesSpec :: (Typeable  ty
              ,Typeable     term
@@ -2172,21 +2175,43 @@ typesLaws (_ :: Proxy ty) (_ :: Proxy term) =
 
 <<representation-examples>>
 
+representationTest :: String -> [Value] -> HType -> IO Bool
 representationTest name values repr = do
-    if toHType inferredType == repr
-       then putStrLn $ "Representation test " <> name <> " succeeded."
+    if foundRepr == repr
+       then do
+         putStrLn $ "*** Representation test " <> name <> " succeeded."
+         return True
        else do
-         putStrLn $ "Representation test failed: "
-         putStrLn $ "Values              : " <> show values
-         putStrLn $ "Inferred type       : " <> show inferredType
-         putStrLn $ "Representation found: " <> show $ toHType inferredType
-         putStrLn $ "Expected            : " <> show   repr
+         putStrLn $ "Representation test " <> name <> " failed: "
+         putStrLn $ "Values        : " <> show values
+         putStrLn $ "Inferred type : " <> show inferredType
+         putStrLn $ "Representation: " <> show foundRepr
+         putStrLn $ "Expected      : " <> show repr
+         return False
   where
+    foundRepr :: HType
+    foundRepr = toHType inferredType
+    inferredType :: UnionType
     inferredType = foldMap infer values
+
+readJSON = fromMaybe ("Error reading JSON file")
+         . decodeStrict
+         . BS.unlines
+         . filter notComment
+         . 
+         BS.lines
+  where
+    notComment (BS.isPrefixOf "//" -> True) = False
+    notComment  _                           = True
 
 representationSpec = do
   representationTest "1a" example1a_values example1a_repr 
-
+  representationTest "1b" example1b_values example1b_repr 
+  representationTest "1c" example1c_values example1c_repr 
+  representationTest "2"  example2_values  example2_repr 
+  representationTest "3"  example3_values  example3_repr 
+  representationTest "4"  example4_values  example4_repr 
+  representationTest "5"  example5_values  example5_repr 
 ```
 
 # Appendix: package dependencies {#appendix-package-dependencies .unnumbered}
@@ -2243,6 +2268,7 @@ tests:
       - hashable
       - quickcheck-classes
       - file-embed
+      - bytestring
   less-arbitrary:
     main: LessArbitrary.hs
     source-dirs:
@@ -2389,21 +2415,31 @@ instance ToHType NumberConstraint where
   toHTypes NCFloat = ["Double"]
   toHTypes NCInt   = ["Int"]
 instance ToHType StringConstraint where
-  toHTypes SCAny   = ["String"]
-  toHTypes SCEmail = ["Email"]
-  toHTypes SCDate  = ["Date"]
-  toHTypes SCNever = []
+  toHTypes  SCAny      = ["String"]
+  toHTypes  SCEmail    = ["Email"]
+  toHTypes  SCDate     = ["Date"]
+  toHTypes (SCEnum es) = [HADT $
+                          mkCons <$> Set.toList es
+                         ]
+    where
+      mkCons = (`HCons` [])
+             .   HConsId
+             .   Text.unpack
+  toHTypes  SCNever    = []
 ```
 
 For array and object types we pick the representation which presents the lowest cost of optionality:
 ```{.haskell #representation}
 instance ToHType ObjectConstraint where
+  toHTypes ObjectNever           = []
   toHTypes ObjectConstraint {..} =
     if typeCost recordCase <= typeCost mappingCase
-      then [toHType recordCase ]
-      else [toHType mappingCase]
+      then toHTypes recordCase
+      else toHTypes mappingCase
 
 instance ToHType RecordConstraint where
+  toHTypes  RCBottom = []
+  toHTypes  RCTop    = [htop] -- should never happen
   toHTypes (RecordConstraint fields) =
       [HADT
           [HCons "" $ fmap convert $ Map.toList fields]
@@ -2428,6 +2464,7 @@ instance ToHType RowConstraint where
     ]
 
 instance ToHType ArrayConstraint where
+  toHTypes ArrayNever           = []
   toHTypes ArrayConstraint {..} =
     if   typeCost arrayCase <= typeCost rowCase
       -- || count <= 3
