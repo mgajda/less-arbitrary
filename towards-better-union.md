@@ -1,6 +1,7 @@
 ---
 title:  "Towards a more perfect union type"
 shorttitle: "Towards perfect union type"
+subtitle: "Functional pearl"
 author:
   - name: Michał J. Gajda
     email: mjgajda@migamake.com
@@ -138,10 +139,12 @@ motivation for the present study:
 ```
 
 ```{.haskell #representation-examples .hiden}
+example1a_values :: [Value]
 example1a_values = String <$> [
     "amy@example.com"
   , "edward@example.com"
   ]
+example1a_repr :: HType
 example1a_repr = HRef "Email"
 ```
 
@@ -163,6 +166,7 @@ not_example1a_values  =
   ["{'message': 'Where can I submit my proposal?' ,'uid' : 1014}"
   ,"{\"error\"  : \"Authorization failed\", \"code\" : 401}"]
 
+not_example1a_repr :: HType
 not_example1a_repr = HRef "Email"
 ```
 
@@ -355,7 +359,7 @@ data Example {
 
 ```{.haskell #representation-examples .hidden }
 example6_values :: [Value]
-example6_values = [fromJust $ decodeStrict $(embedFile "test/example6.json")]
+example6_values = [readJSON $(embedFile "test/example6.json")]
   
 example6_repr = HApp
      "Map"
@@ -529,13 +533,17 @@ In other words the `beyond` set is an attractor of `<>` on both sides [^10].
 Concerning union types, the key property of the `beyond` set, is that it is closed to
 information acquisition:
 
-``` {#typelike-spec .haskell}
+``` {.haskell #typelike-spec}
 beyond_is_closed :: forall   ty.
                     Typelike ty
                  => ty -> ty -> Property
 beyond_is_closed ty1 ty2 = do
   beyond (ty1 :: ty) ==> beyond (ty1 <> ty2)
 
+typelikeLaws :: (Arbitrary a
+                ,Typelike  a)
+             =>  Proxy     a
+             ->  Laws
 typelikeLaws (Proxy :: Proxy a) =
   Laws "Typelike"
     [("beyond is closed",
@@ -789,10 +797,10 @@ instance Typelike NumberConstraint where
 instance NumberConstraint `Types` Scientific where
   infer sci
     | base10Exponent sci >= 0 = NCInt
-  infer sci                   = NCFloat
-  check NCFloat sci = True
+  infer _                     = NCFloat
+  check NCFloat _   = True
   check NCInt   sci = base10Exponent sci >= 0
-  check NCNever sci = False
+  check NCNever _   = False
 
 instance Monoid NumberConstraint where
   mempty = NCNever
@@ -812,7 +820,8 @@ data StringConstraint =
 instance StringConstraint `Types` Text where
   infer (isValidDate  -> True) = SCDate
   infer (isValidEmail -> True) = SCEmail
-  infer value = SCEnum $ Set.singleton value
+  infer  _     = SCAny
+  infer  value = SCEnum $ Set.singleton value
 
   check  SCDate     s = isValidDate  s
   check  SCEmail    s = isValidEmail s
@@ -1407,8 +1416,7 @@ data UnionType =
   , unionStr  :: StringConstraint
   , unionArr  :: ArrayConstraint
   , unionObj  :: ObjectConstraint
-  }
-  deriving (Eq,Show,Generic)
+  } deriving (Eq,Generic)
 
 instance Semigroup UnionType where
   u1 <> u2 =
@@ -1420,6 +1428,40 @@ instance Semigroup UnionType where
     , unionObj  = ((<>) `on` unionObj ) u1 u2
     , unionArr  = ((<>) `on` unionArr ) u1 u2
     }
+```
+
+```{.haskell #type}
+instance Show UnionType where
+  showsPrec _ UnionType {..} =
+      showString "UnionType {"
+    . showsElts [
+        showsNonEmpty "unionNull" unionNull
+      , showsNonEmpty "unionBool" unionBool
+      , showsNonEmpty "unionNum"  unionNum
+      , showsNonEmpty "unionStr"  unionStr
+      , showsNonEmpty "unionObj"  unionObj
+      , showsNonEmpty "unionArr"  unionArr
+      ]
+    . showString "}"
+
+showsNonEmpty :: (Eq     a
+                 ,Show   a
+                 ,Monoid a)
+              =>  String
+              ->         a
+              ->  Maybe ShowS
+showsNonEmpty _    field | field == mempty = Nothing
+showsNonEmpty name field                   = Just $
+  showString name . showString "=" . showsPrec 0 field
+
+showsElts :: [Maybe ShowS] -> ShowS
+showsElts elts =
+  case catMaybes elts of
+    []     -> id
+    (x:xs) -> compose $
+     x:map (showString ", ".) xs
+  where
+    compose = foldr (.) id
 ```
 
 The generic structure of union type can be explained by the fact that
@@ -1771,12 +1813,12 @@ Bibliography {#bibliography .unnumbered}
 {-# language ViewPatterns           #-}
 {-# language RecordWildCards        #-}
 {-# language OverloadedStrings      #-}
-{-# options_ghc -Wno-orphans        #-}
+{-# ghc_options -Wno-orphans        #-}
 module Unions where
 
 import           Control.Arrow(second)
 import           Data.Aeson
-import           Data.Maybe(isJust)
+import           Data.Maybe(isJust,catMaybes)
 import qualified Data.Foldable as Foldable
 import           Data.Function(on)
 import           Data.Text(Text)
@@ -1787,13 +1829,15 @@ import qualified Data.Set  as Set
 import           Data.Set(Set)
 import           Data.Scientific
 import           Data.String
-import           Data.List(sortBy)
+--import           Data.List(sortBy)
 import qualified Data.HashMap.Strict as Map
 import           Data.HashMap.Strict(HashMap)
 import           GHC.Generics(Generic)
-import           Data.Time.ISO8601
 import           Data.Hashable
 import           Data.Typeable
+import Data.Time.Format(iso8601DateFormat,parseTimeM,defaultTimeLocale)
+import Data.Time.Calendar(Day)
+
 
 <<freetype>>
 <<typelike>>
@@ -1827,39 +1871,27 @@ import           Data.Typeable
 {-# language AllowAmbiguousTypes   #-}
 {-# language OverloadedStrings     #-}
 {-# language ViewPatterns          #-}
-{-# ghc_option  -Wno-orphans       #-}
+{-# ghc_options -Wno-orphans       #-}
 module Main where
 
-import Data.String(IsString(..))
-import qualified Data.HashMap.Strict as Map
 import qualified Data.Set            as Set
-import qualified Data.Vector         as Vector
 import qualified Data.Text           as Text
-import qualified Data.Text.Encoding  as Text
 import qualified Data.ByteString.Char8 as BS
-import Control.Monad(replicateM, when)
+import Control.Monad(when)
 import Data.FileEmbed
 import Data.Maybe
 import Data.Scientific
 import Data.Aeson
 import Data.Proxy
 import Data.Typeable
-import Data.Hashable
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
-import Test.QuickCheck.Gen
-import Test.Hspec
-import Test.Hspec.QuickCheck
-import Test.QuickCheck
-import Test.QuickCheck.Arbitrary.Generic
-import Test.Validity hiding(check)
-import Test.Validity.Monoid
 import Test.Validity.Shrinking.Property
-import Test.Validity.Utils(nameOf)
+import           Test.Validity.Utils(nameOf)
 import qualified GHC.Generics as Generic
-import Test.QuickCheck.Classes
-import System.Exit(exitFailure)
+import           Test.QuickCheck.Classes
+import           System.Exit(exitFailure)
 
 import Test.Arbitrary
 import Test.LessArbitrary as LessArbitrary
@@ -1976,6 +2008,7 @@ instance (Ord               v
   typeCost  Full        = inf
   typeCost (FreeType s) = TyCost $ Set.size s
 
+{-
 instance (Eq                      a
          ,Ord                     a
          ,GenUnchecked            a
@@ -1992,6 +2025,7 @@ instance (Eq                      a
 
 instance Validity (FreeType a) where
   validate _ = validate True
+ -}
 
 instance LessArbitrary (PresenceConstraint a) where
   lessArbitrary = genericLessArbitraryMonoid
@@ -2046,9 +2080,11 @@ instance LessArbitrary UnionType where
 instance Arbitrary     UnionType where
   arbitrary = fasterArbitrary
 
+{-
 instance GenUnchecked UnionType where
   genUnchecked    = arbitrary
   shrinkUnchecked = shrink
+ -}
 
 {-
 instance Validity UnionType where
@@ -2081,18 +2117,19 @@ allSpec = describe (nameOf @ty) $ do
 <<types-spec>>
 <<typecost-laws>>
 
-main = do
+main :: IO ()
+main  = do
+  exitFailure
   putStrLn "NumberConstraint"
-  sample $ arbitrary @Value
+  {-sample $ arbitrary @Value
   sample $ arbitrary @NullConstraint
   sample $ arbitrary @NumberConstraint
   sample $ arbitrary @RowConstraint
   sample $ arbitrary @RecordConstraint
   sample $ arbitrary @ArrayConstraint
   sample $ arbitrary @MappingConstraint
-  sample $ arbitrary @ObjectConstraint
+  sample $ arbitrary @ObjectConstraint-}
 
-  representationSpec
   lawsCheckMany 
     [typesSpec (Proxy :: Proxy (FreeType Value) )
                (Proxy :: Proxy Value     ) True
@@ -2119,6 +2156,7 @@ main = do
     ,typesSpec (Proxy :: Proxy (Counted NumberConstraint))
                (Proxy :: Proxy Scientific     ) False
     ]
+  representationSpec
 
 typesSpec :: (Typeable  ty
              ,Typeable     term
@@ -2184,7 +2222,7 @@ representationTest name values repr = do
          putStrLn $ "*** Representation test " <> name <> " succeeded."
          return True
        else do
-         putStrLn $ "Representation test " <> name <> " failed: "
+         putStrLn $ "*** Representation test " <> name <> " failed: "
          putStrLn $ "Values        : " <> show values
          putStrLn $ "Inferred type : " <> show inferredType
          putStrLn $ "Representation: " <> show foundRepr
@@ -2196,6 +2234,8 @@ representationTest name values repr = do
     inferredType :: UnionType
     inferredType = foldMap infer values
 
+readJSON :: HasCallStack
+         => BS.ByteString -> Value
 readJSON = fromMaybe ("Error reading JSON file")
          . decodeStrict
          . BS.unlines
@@ -2206,7 +2246,8 @@ readJSON = fromMaybe ("Error reading JSON file")
     notComment (BS.isPrefixOf "//" -> True) = False
     notComment  _                           = True
 
-representationSpec = do
+representationSpec :: IO ()
+representationSpec  = do
   b <- sequence
     [representationTest "1a" example1a_values example1a_repr
     ,representationTest "1b" example1b_values example1b_repr
@@ -2250,7 +2291,6 @@ dependencies:
 - genvalidity
 - genvalidity-hspec
 - genvalidity-property
-- iso8601-time
 - time
 - email-validate
 - generic-arbitrary
@@ -2378,12 +2418,13 @@ To convert union type discipline to strict Haskell type representations,
 we need to join the options to get the actual representation:
 ```{.haskell #representation}
 toHType :: ToHType ty => ty -> HType
-toHType arg =
-    case toHTypes arg of
-      []   -> htop -- promotion of empty type
-      alts -> foldr1 mkUnion alts
+toHType  = joinAlts . toHTypes
+
+joinAlts     :: [HType] -> HType
+joinAlts []   =  htop -- promotion of empty type
+joinAlts alts =  foldr1 joinPair alts
   where
-    mkUnion a b = HApp ":|:" [a, b]
+    joinPair a b = HApp ":|:" [a, b]
 ```
 
 Considering the assembly of `UnionType`, we join all the options,
@@ -2399,8 +2440,9 @@ instance ToHType UnionType where
                     ,toHTypes unionArr
                     ,toHTypes unionObj]
 
-prependNullable Present tys = [HApp "Maybe" tys]
-prependNullable Absent  tys =               tys
+prependNullable :: PresenceConstraint a -> [HType] -> [HType]
+prependNullable Present tys = [HApp "Maybe" [joinAlts tys]]
+prependNullable Absent  tys =                tys
 ```
 
 The type class returns a list of mutually exclusive type representations:
@@ -2494,8 +2536,13 @@ For validation of dates and emails, we import functions from Hackage:
 ```{.haskell #missing}
 isValidDate :: Text -> Bool
 isValidDate = isJust
-            . parseISO8601
+            . parseDate
             . Text.unpack
+  where
+    parseDate :: String -> Maybe Day
+    parseDate  = parseTimeM True
+                            defaultTimeLocale $
+                            iso8601DateFormat Nothing
 
 isValidEmail :: Text -> Bool
 isValidEmail = Text.Email.Validate.isValid
