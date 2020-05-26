@@ -1,6 +1,6 @@
 ---
 title:  "Towards a more perfect union type"
-shorttitle: "Towards perfect union type"
+shorttitle: "Perfect union type"
 subtitle: "Functional pearl"
 author:
   - name: Michał J. Gajda
@@ -15,13 +15,13 @@ tags:
 abstract: |
   We present a principled theoretical
   framework for dealing with union types,
-  system, and show its work in practice
+  and show its work in practice
   on JSON data structures.
 
-  The framework poses union type
-  inference as a problem of learning
+  The framework poses a union type
+  inference as a learning problem
   from multiple examples.
-  Mathematical framework is quite
+  The mathematical framework is quite
   generic, and easily extensible.
 date:   2020-04-04
 description: |
@@ -42,7 +42,7 @@ tables: true
 listings: true
 acks: |
 
-  Author thanks for all tap-on-the-back donations to his past projects.
+  The author thanks for all tap-on-the-back donations to his past projects.
 
   The text was prepared with great help of bidirectional literate programming[@literate-programming] tool[@entangled],
   Pandoc[@pandoc] markdown publishing system and live feedback from GHCid[@ghcid].
@@ -85,12 +85,12 @@ The other attempt to automatically infer schemas has been introduced in the PADS
 [@pads]. Nevertheless, it has not specified a generalized type-system design methodology.
 
 An approach presented with a program called [@quicktype] has been developed to derive types based on
-Markov chains. This approach approach requires considerable engineering time due to the implementation
+Markov chains. This approach requires considerable engineering time due to the implementation
 unit tests in a case-by-case mode, instead of formulating laws applying to all types.
-Moreover, this approach lacks sound underlying theory.
+Moreover, this approach lacks a sound underlying theory.
 
 Therefore, we summarize that there are several previously introduced approaches that provide partially
-satisfactory results. In present study, we aim to expand these proposals to enable systematic
+satisfactory results. In the present study, we aim to expand these proposals to enable systematic
 addition of features, and automatic validation of types.
 
 
@@ -127,7 +127,7 @@ motivation for the present study:
 
 1.  Subsets of data within a single constructor:
 
--   *API argument is an email* -- it is subset of valid `String`
+-   *API argument is an email* -- it is a subset of valid `String`
     values, that can be validated on the client side.
 
 ```{.json language="JSON"}
@@ -243,7 +243,7 @@ example2_repr = HADT [
 
 3.  Variant fields:
 
--   *Answer to a query is either a number of of registered objects, or
+-   *Answer to a query is either a number of registered objects, or
     String `"unavailable"`* - this is integer value (`Int`) or a `String`
 
 ```{.json file=test/example3.json .hidden}
@@ -388,7 +388,7 @@ data O_6408f5 = O_6408f5 {
   }
 ```
 
-It also suggests that a user might decide to explicitly add an evidence for
+It also suggests that a user might decide to explicitly add evidence for
 one of alternative representations in the case when samples are insufficient.
 (like in case of a single element dictionary.)
 :::
@@ -407,18 +407,18 @@ Accordingly, we can assume that the smallest non-singleton set is a better
 approximation type than a singleton set. We call it *minimal containing set
 principle*.
 
-Second we can prefer types that allow for fewer number of *degrees of freedom*
-compared with the others, while conforming to a commonly occuring structure. We
+Second we can prefer types that allow for a fewer number of *degrees of freedom*
+compared with the others, while conforming to a commonly occurring structure. We
 denote it as an *information content principle*.
 
-Given these principles, and examples of frequently occuring
+Given these principles, and examples of frequently occurring
 patterns, we can infer a reasonable *world of types* that can be used as
 approximations, instead of establishing this procedure in an ad-hoc
 manner. In this way,we can implement *type
 system engineering*, that allows deriving type system design
 directly from the information about data structures
 and the likelihood of their
-occurence.
+occurrence.
 
 Problem definition
 ==================
