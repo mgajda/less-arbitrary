@@ -2123,16 +2123,16 @@ allSpec = describe (nameOf @ty) $ do
 
 main :: IO ()
 main  = do
-  exitFailure
-  putStrLn "NumberConstraint"
-  {-sample $ arbitrary @Value
+  {-
+  sample $ arbitrary @Value
   sample $ arbitrary @NullConstraint
   sample $ arbitrary @NumberConstraint
   sample $ arbitrary @RowConstraint
   sample $ arbitrary @RecordConstraint
   sample $ arbitrary @ArrayConstraint
   sample $ arbitrary @MappingConstraint
-  sample $ arbitrary @ObjectConstraint-}
+  sample $ arbitrary @ObjectConstraint
+  -}
 
   lawsCheckMany 
     [typesSpec (Proxy :: Proxy (FreeType Value) )
@@ -2212,6 +2212,9 @@ typesLaws (_ :: Proxy ty) (_ :: Proxy term) =
                ,("beyond contains all terms"
                 ,property $
                   beyond_contains_all_terms       @ty @term)
+               ,("fusion keeps terms"
+                ,property $
+                  fusion_keeps_terms              @ty @term)
                ,("inferred type contains its term"
                 ,property $
                   inferred_type_contains_its_term @ty @term)
