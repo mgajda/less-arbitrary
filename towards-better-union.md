@@ -671,13 +671,33 @@ The law asserts that the following diagram commutes:
 ``` {#fig:type-commutes .dot width="45%" height="20%"}
 digraph type {
   node [shape=box,color=white];
-  subgraph g {
-    Bool; Type;
+
+  subgraph types {
+    Type1  [label=<Type<SUB>1</SUB>>];
+    Type2  [label=<Type<SUB>2</SUB>>];
     rank=same;
   }
-  Value -> Type [xlabel="infer"];
-  Type  -> Bool [label="check with value"];
-  Value -> Bool [label="const True"];
+  TypeM  [label=<Type<SUB>1+2</SUB>>];
+  Bool;
+
+  subgraph sinks {
+    Value1 [label=<Value<SUB>1</SUB>>];
+    Value2 [label=<Value<SUB>2</SUB>>];
+    rank=sink;
+  }
+  Type1 -> TypeM [label=<+Type<SUB>2</SUB>>]
+  Type2 -> TypeM [label=<+Type<SUB>2</SUB>>]
+  Value1 -> TypeM [style=invis,weight=2];
+  Value2 -> TypeM [style=invis,weight=2];
+
+  Value1 -> Type1 [label="infer"];
+  Value2 -> Type2 [label="infer"];
+  Type1  -> Bool [label=<check<BR/>Value<SUB>1</SUB>>];
+  Type2  -> Bool [label=<check<BR/>Value<SUB>2</SUB>>];
+  Value1 -> Bool [label="const True"];
+  Value2 -> Bool [label="const True"];
+  TypeM  -> Bool [label=<check<BR/>Value<SUB>1</SUB>>];
+  TypeM  -> Bool [label=<check<BR/>Value<SUB>2</SUB>>];
 }
 ```
 
@@ -702,7 +722,7 @@ corresponding to the case of *no sample data received*, and a single `beyond` el
 We will define it below as `PresenceConstraint` in [@sec:presence-absence-constraints].
 
 It should be noted that these laws are still compatible with the strict, static type
-discipline: namely the `beyond` set corresponds to a set of constrants with at least one
+discipline: namely the `beyond` set corresponds to a set of constraints with at least one
 type error, and a task
 of a compiler to prevent any program with the terms that type only to
 the `beyond` as a least upper bound.
@@ -718,12 +738,12 @@ Observing that  $a: \text{false}$ we can expect that in particular cases,
 we may obtain that $a : \text{true}$.
 After noting that $b: 123$, we expect that $b: 100$ would also be
 acceptable. It means that we need to consider a typing system to *learn a reasonable
-general class from few instances*. This motivates formulating type system 
+general class from few instances*. This motivates formulating the type system 
 as an inference problem.
 
 As the purpose is to deliver the most descriptive[^11] types, we assume
 that we need to obtain a wider view rather than focusing on a *free type*
-and applying it to a larger sets whenever it is deemed justified.
+and applying it to larger sets whenever it is deemed justified.
 
 The other principle corresponds to **correct operation**. It implies
 that having operations regarded on types,
@@ -897,7 +917,7 @@ instance (Ord      a
 ```
 
 This definition is deemed sound, and may be applicable
-to a finite sets of terms or values.
+to finite sets of terms or values.
 For a set of values: `["yes", "no", "error"]`, we may
 reasonably consider that type is an appropriate approximation of C-style
 enumeration, or Haskell-style ADT without constructor arguments.
@@ -936,7 +956,7 @@ instance PresenceConstraint a `Types` a where
   check Absent  _ = False
 ```
 
-Altough it does not seem useful in the context implying that we always
+Although it does not seem useful in the context implying that we always
 have at least one input value, it is important as it can be used
 to specify an empty array (and therefore, an element type for which we observed no values).
 
@@ -1544,7 +1564,7 @@ instance TypeCost UnionType where
 ### Overlapping alternatives
 
 The essence of union type systems have long been dealing with
-the conflicting types providen in the input.
+the conflicting types provided in the input.
 
 Motivated by the examples above, we also aim to address
 conflicting alternative assignments.
@@ -2587,13 +2607,13 @@ Appendix: Damas-Milner as `Typelike` {#appendix-hindley-milner-as-typelike .unnu
 [^10]: So both in `forall a. (<> a)` and ∀`a.(a<>)` the result is kept in the
     `beyond` set.
 
-[^11]: The shortest one accoding to the information complexity
+[^11]: The shortest one according to the information complexity
        principle.
 
 [^12]: The implementation will make it optional with `--infer-int-ranges`.
 
-[^13]: Choice of representation will be explained later. Here we only
-    consider acquiring the information about possible values.
+[^13]: The choice of representation will be explained later. Here we only
+    consider acquiring information about possible values.
 
 [^14]: The question may arise: what is the *union type* without *set
     union*? When the sets are disjoint, we just put the values in different
