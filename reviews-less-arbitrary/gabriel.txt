@@ -1,0 +1,10 @@
+1. Try to decrease number of `LANGUAGE` pragmas.
+2. Publish the library on Hackage.
+3. Something weird happens at line 342.
+
+Seems still opaque to him.
+My idea:
+* try an angle of showing examples of
+  - normal value-level function
+  - type family as type-level function
+  - class hierarchy fragment as **partial** type-to-value level function
