@@ -54,7 +54,7 @@ Introduction
 
 Typing dynamic languages has been long considered a challenge
 [@javascript-inference]. The importance of the task grown with
-ubiquity cloud application programming
+the ubiquity cloud application programming
 interfaces (APIs) utilizing JavaScript object notation (JSON),
 where one needs to infer the structure having only a limited number of sample documents available.
 
@@ -103,11 +103,23 @@ partial) of *reduction* within a term rewriting system.
 General formulations have been introduced for the Damas-Milner
 type systems parameterized by constraints [@HM-X,@Jones].
 
-We are not aware of any attempts to formulate general laws that would
-apply to all existing union type systems. Moreover, to the best of our knowledge
-no previous formulation exists that consider complete relations or functions in order to
-provide consistent mathematical descriptions where terms
-stray beyond their desired types[^1].
+Early approach approach used lattice structure on the types [@subtyping-lattice],
+which is more stringent that ours, since it requires idempotence
+of unification (as join operation), as well as complementary meet operation
+with the same properties.
+
+Semantic subtyping approach provides a characterization
+of set-based union, intersection, and complement types[@semantic-subtyping],
+which impose a structure comparable to Heyting algebra on the types.
+
+We are not aware of any attempts to generalize this approach beyond
+set-theoretic background into a category-theoretic laws, nor to relax assumptions
+to let go of idempotence, and a single $\top$ element[^1].
+
+We are also not aware of a type inference framework that consistently
+and completely preserve information in face of inconsistencies nor errors,
+beyond using `bottom` and expanding to *infamous undefined
+behaviour*[@undefined1,@undefined2,@undefined3].
 
 It is also worth noting that traditional Damas-Milner type disciplines embrace the laws of soundness,
 and subject-reduction.
@@ -121,9 +133,8 @@ Motivating examples
 -------------------
 
 Here, we consider several examples paraphrased from JSON API descriptions.
-These describe types underlying the
-motivation for the present study:
-
+We provide these examples in the form of a few JSON objects,
+along with desired representation as Haskell data declaration.
 
 1.  Subsets of data within a single constructor:
 
@@ -131,14 +142,11 @@ motivation for the present study:
     values, that can be validated on the client side.
 
 ```{.json language="JSON"}
-{"example": [
-  "amy@example.com"
-  "robert@example.com"
-  ]
-}
+"amy@example.com"
+"robert@example.com"
 ```
 
-```{.haskell #representation-examples .hiden}
+```{.haskell #representation-examples .hidden}
 example1a_values :: [Value]
 example1a_values = String <$> [
     "amy@example.com"
@@ -148,7 +156,7 @@ example1a_repr :: HType
 example1a_repr = HRef "Email"
 ```
 
-``` {.haskell language="Haskell" file=test/example1a.result .hidden}
+``` {.haskell language="Haskell" file=test/example1a.result}
 newtype Example = Example Email
 ```
 
@@ -157,6 +165,10 @@ newtype Example = Example Email
     "uid" : 1014}
 {"error"  : "Authorization failed",
    "code" : 401}
+```
+
+```{.haskell}
+data 
 ```
 
 ```{.haskell #representation-examples .hidden}
@@ -174,6 +186,11 @@ not_example1a_repr = HRef "Email"
     max:10,000)* - it is also a subset of integer values (`Int`) between $10$,
     and $10,000$
 
+```{.json language="JSON"}
+10
+10000
+```
+
 ``` {.json language="JSON" file=test/example1b.json .hidden }
 {"example": [
   10,
@@ -182,7 +199,7 @@ not_example1a_repr = HRef "Email"
 ```
 
 ``` {.haskell file=test/example1b.result .hidden }
-newtype Example = Example [Int]
+newtype Example = Example Int
 ```
 
 ```{.haskell #representation-examples .hidden }
@@ -223,7 +240,7 @@ example1c_repr = HRef "Date"
 {"page_size": 50}
 ```
 
-```{.haskell file=test/example2.result .hidden}
+```{.haskell file=test/example2.result}
 newtype Example = Example { page_size :: Maybe Int }
 ```
 
@@ -246,12 +263,14 @@ example2_repr = HADT [
 -   *Answer to a query is either a number of registered objects, or
     String `"unavailable"`* - this is integer value (`Int`) or a `String`
 
-```{.json file=test/example3.json .hidden}
-"alpha"
+```{.json file=test/example3.json}
 10
+20
+40
+"unavailable"
 ```
 
-``` {.haskell .hidden file=test/example3.result}
+``` {.haskell file=test/example3.result}
 newtype Example = Example (String :|: Int)
 ```
 
@@ -269,10 +288,14 @@ example3_repr =
     That is can be represented as one of following options:
 
 ``` {.json file=test/example4.json}
-{"message" : "Where can I submit my proposal?", "uid"  : 1014}
-{"message" : "Submit it to HotCRP",             "uid"  :  317}
-{"error"   : "Authorization failed",            "code" :  401}
-{"error"   : "User not found",                  "code" :  404}
+{"message" : "Where can I submit my proposal?",
+ "uid"  : 1014}
+{"message" : "Submit it to HotCRP",
+ "uid"  :  317}
+{"error"   : "Authorization failed",
+ "code" :  401}
+{"error"   : "User not found",
+ "code" :  404}
 ```
 
 ```{.haskell #representation-examples .hidden }
@@ -306,9 +329,9 @@ example4_repr = HADT [
 data Examples = Examples [Example]
 
 data Example = Example {
-    field1 :: Int
-  , field2 :: String
-  , field3 :: Maybe Date
+    col1 :: Int
+  , col2 :: String
+  , col3 :: Maybe Date
   }
 ```
 
@@ -379,7 +402,10 @@ Haskell representation inference to be non-monotonic,
 as a dictionary with a single key would have an incompatible type:
 
 ``` {.haskell file=test/example6-single-key.result}
-data Example = Example { f_6408f5 :: O_6408f5 }
+data Example = Example { f_6408f5 :: O_6408f5
+                       , f_54fced :: O_6408f5
+                       , f_6c9589 :: O_6408f5
+                       }
 data O_6408f5 = O_6408f5 {
     size       :: Int
   , height     :: Int
@@ -391,6 +417,19 @@ data O_6408f5 = O_6408f5 {
 It also suggests that a user might decide to explicitly add evidence for
 one of alternative representations in the case when samples are insufficient.
 (like in case of a single element dictionary.)
+
+```{.haskell file=test/example6-multi-key.result}
+data Example    =
+     Example (Map Hex
+                  ExampleElt)
+data ExampleElt = ExampleElt {
+    size       :: Int
+  , height     :: Int
+  , difficulty :: Double
+  , previous   :: String
+  }
+```
+
 :::
 
 Goal of inference
@@ -459,7 +498,7 @@ If an inference fails, it is always possible to correct it by introducing
 an additional observation (example).
 To denote unification operation, or **information fusion** between two type descriptions,
 we use a `Semigroup` interface operation `<>` to merge types inferred
-from different observations.
+from different observations. If `Typelike` is semilattice, then `<>` is join operation.
 
 ``` {.haskell file=refs/Data/Semigroup.hs}
 class Semigroup ty where
@@ -476,16 +515,12 @@ class Semigroup ty
     mempty :: ty
 ```
 In other words, we can say that `mempty` corresponds to situation wher **no information was accepted** about a possible
-value (no term seen, not even a null). For example, an empty array \[\]
-can be referred to as an array type with mempty as an element type.
+value (no term seen, not even a null). It is neutral element of `Typelike`.
+For example, an empty array \[\]
+can be referred to as an array type with `mempty` as an element type.
 
-We describe the laws as QuickCheck \[\@quickcheck\] properties so that
+We describe the laws as QuickCheck [@quickcheck] properties so that
 unit testing can be implemented to detect obvious violations.
-
-Neutral element of the `Typelike` monoid, `mempty` stands for **no
-information accepted** about possible value (no term seen, not even a
-`null`). For example an empty array `[]` could be typed as a array type
-with `mempty` as element type.
 
 ### Beyond set
 
@@ -504,7 +539,9 @@ Moreover, strict type systems usually specify more than one error value,
 as it should contain information about error messages and to keep track
 from where an error has been originated^[7].
 
-This observation lets us consider type inference as a **learning problem**,
+This observation lets us go well beyond typing statement of gradual type inference
+as discovery problem from partial information[@gradual-typing].
+Here we consider type inference as a **learning problem**,
 and allows finding the common ground between the dynamic and the static typing
 discipline.
 
@@ -515,7 +552,7 @@ a **narrow** type. In this setting `mempty` as a fully polymorphic type `forall 
 Languages with dynamic type discipline will treat `beyond` as untyped,
 dynamic value, and `mempty` again is a fully unknown, polymorphic value (like a type of an element of an empty array)[^8].
 
-``` {#typelike .haskell}
+```{.haskell #typelike }
 class (Monoid t, Eq t,Show t)
    =>  Typelike t where
    beyond :: t -> Bool
@@ -526,7 +563,9 @@ In addition, the standard laws for a **commutative** `Monoid`, we state
 the new law for the `beyond` set: The `beyond` set is always **closed to information
 addition** by `(<>a)` or `(a<>)` for any value of `a`. 
 In other words the `beyond` set is an attractor of `<>` on both sides [^10].
-
+However we do not require _idempotence_ of `<>`, which is uniformly present
+in union type frameworks based on lattice[@subtyping-lattice]
+and set-based approaches^[Which use Heyting algebras, which have more assumptions that the lattice approaches.][@semantic-subtyping].
 
 Concerning union types, the key property of the `beyond` set, is that it is closed to
 information acquisition:
@@ -555,7 +594,7 @@ typelikeLaws (Proxy :: Proxy a) =
 testing can detect obvious violations.)
 
 In this way, we can specify other elements of `beyond` set instead of a single `top`.
-When typing strict language, like Haskell, we seek to enable each element of the `beyond` set
+When under strict type discipline, like that of Haskell[@haskell], we seek to enable each element of the `beyond` set
 to contain at least one error message.[^9]
 
 It should be noted that here, we abolish the semilattice requirement
@@ -569,11 +608,6 @@ when dealing with alternative representations.
 When a specific instance of `Typelike` is also a semilattice (an idempotent semigroup),
 we will explicitly indicate if that is the case.
 
-
-
-
-
-
 It is convenient validation when testing a recursive structure of the
 type.
 
@@ -582,17 +616,17 @@ assumed for type constraints here[@subtyping-lattice].
 
 That is because this requirement is valid only for strict type
 constraint inference, not for a more general type inference as a
-learning problem. As we saw in the example @lst:row-constraint, we
-need non-monotonic inference when dealing with alternative
-representations.
+learning problem. As we saw on `ExampleRowConstraint`
+in [@#example:nonmonotonic-inference], we need non-monotonic
+inference when dealing with alternative representations.
 
 It should be noted that this approach significantly generalized the assumptions compared
-with a full lattice subtyping [@subtype-inequalities][@subtyping-lattice].
+with a full lattice subtyping [@subtype-inequalities;@subtyping-lattice].
 
 ### Typing relation and its laws
 
 The minimal definition of typing inference relation and type checking relation
-can be formulated as follows:
+can be formulated as below:
 
 ``` {.haskell #typelike }
 class Typelike ty
@@ -601,7 +635,8 @@ class Typelike ty
    check :: ty -> val -> Bool
 ```
 
-
+In order to preserve proper English word order, we state `val \`Types\` ty`
+instead of classical `val : ty`.
 
 Specifying the laws of typing is important, since we may need to consider separately
 the validity of a domain of types/type constraints, and that of the sound typing of the
@@ -748,7 +783,7 @@ and applying it to larger sets whenever it is deemed justified.
 The other principle corresponds to **correct operation**. It implies
 that having operations regarded on types,
 we can find a minimal set of types that assure correct
-operation om the case of unexpected errors.
+operation in the case of unexpected errors.
 
 Indeed we want to apply this theory to infer a type definition from a
 finite set of examples. We also seek to generalize it to infinite
@@ -758,19 +793,15 @@ For this purpose, we set the following rules of type design:
 
 -   type should have a finite description
 -   inference must be a contravariant functor with regards to
-    constructors. For example, if `{"a": X, "b": Y}` that is typed by `T x y`, then
-    `X :: x` and `Y :: y` must correspond to a valid typing.
+    constructors. For example, if `AType x y` types `{"a": X, "b": Y}`, then
+    `x` must type `X`, and `y` must type `Y`.
 
 
 ### Flat type constraints
 
-Let us first consider typing of flat types: `String` and `Number`.
+Let us first consider typing of flat types: `String` and `Number` (also called _base types_.)
 
-#### Constraints on number type
-
-First we infer the type description for integer valuess[^12]:
-
-```{.haskell #basic-constraints}
+```{.haskell #basic-constraints .hidden}
 
 data IntConstraint = IntRange Int Int
                    | IntNever
@@ -797,12 +828,10 @@ instance IntConstraint `Types` Int where
   check  IntNever      _ = False
   check  IntAny        _ = True
   check (IntRange a b) i = a <= i && i <= b
-```
 
-JavaScript provides one number type that contains both `Float` and `Int`, so
-that the JSON values inherit this type:
+--JavaScript provides one number type that contains both `Float` and `Int`,
+--so that the JSON values inherit this type:
 
-``` {#basic-constraints .haskell}
 data NumberConstraint =
     NCInt
   | NCNever
@@ -996,7 +1025,7 @@ instance (FromJSON  a
 ```
 
 In other words for `Int :|: String` type, we first control whether the value is
-a `String`, and if this check fails, we attempt to parse it as `String`.
+an `Int`, and if this check fails, we attempt to parse it as `String`.
 
 Variant records are slightly more complicated, as it may be unclear which
 typing is better to use:
@@ -1031,8 +1060,9 @@ have for each, and how many of them match. Then, we compare this number
 with type complexity (with options being more complex
 to process, because they need additional `case` expression.)
 In such cases,
-the latter definition has only one choice (optionality), but we
-only have two samples to begin with so we cannot be sure.
+the latter definition has only one `Maybe` field (on the toplevel,
+optionality is one),
+while the former definition has four `Maybe` fields (optionality is four).
 
 In the case of having more samples, the pattern emerges:
 
@@ -2579,8 +2609,6 @@ isValidEmail = Text.Email.Validate.isValid
 Appendix: Damas-Milner as `Typelike` {#appendix-hindley-milner-as-typelike .unnumbered}
 ======================================
 
-[^1]: Or at least beyond `bottom` expanding to *infamous undefined
-    behaviour*[@undefined1,@undefined2,@undefined3].
 
 [^2]: Which is considered a bad practice; however, it is part of
     real-life APIs. We may need to make it optional using the
@@ -2604,8 +2632,8 @@ Appendix: Damas-Milner as `Typelike` {#appendix-hindley-milner-as-typelike .unnu
 [^9]: It should be noted that many but not all type constraints are
     semilattice. Please refer to the counting example below.
 
-[^10]: So both in `forall a. (<> a)` and ∀`a.(a<>)` the result is kept in the
-    `beyond` set.
+[^10]: So both for ∀`a(<> a)` and ∀`a.(a<>)`,
+       the result is kept in the `beyond` set.
 
 [^11]: The shortest one according to the information complexity
        principle.
