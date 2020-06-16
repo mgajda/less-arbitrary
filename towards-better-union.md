@@ -129,8 +129,8 @@ and are abandoned in practice of larger systems[@GHCZurihac].
 Motivation
 ==========
 
-Motivating examples
--------------------
+## Motivating examples {#sec:examples}
+
 
 Here, we consider several examples paraphrased from JSON API descriptions.
 We provide these examples in the form of a few JSON objects,
@@ -138,7 +138,7 @@ along with desired representation as Haskell data declaration.
 
 1.  Subsets of data within a single constructor:
 
--   *API argument is an email* -- it is a subset of valid `String`
+a.   *API argument is an email* -- it is a subset of valid `String`
     values, that can be validated on the client side.
 
 ```{.json language="JSON"}
@@ -157,7 +157,7 @@ example1a_repr = HRef "Email"
 ```
 
 ``` {.haskell language="Haskell" file=test/example1a.result}
-newtype Example = Example Email
+newtype Example1a = Example Email
 ```
 
 ``` {.json language="JSON" file=test/example1a.json .hidden}
@@ -165,10 +165,6 @@ newtype Example = Example Email
     "uid" : 1014}
 {"error"  : "Authorization failed",
    "code" : 401}
-```
-
-```{.haskell}
-data 
 ```
 
 ```{.haskell #representation-examples .hidden}
@@ -182,11 +178,11 @@ not_example1a_repr :: HType
 not_example1a_repr = HRef "Email"
 ```
 
--   *The page size determines the number of results to return (min: 10,
-    max:10,000)* - it is also a subset of integer values (`Int`) between $10$,
-    and $10,000$
+b.   *The page size determines the number of results to return (min: 10,
+        max:10,000)* - it is also a subset of integer values (`Int`) between $10$,
+        and $10,000$
 
-```{.json language="JSON"}
+```{.json language="JSON" .hidden}
 10
 10000
 ```
@@ -209,9 +205,10 @@ example1b_values = Number <$> [
   ]
 example1b_repr = HRef "Int"
 ```
--   *The `date` field contains ISO8601 date* -- a record field is represented
-    as a `String` that contains a calendar date in the format
-    `"2019-03-03"`
+
+c. _The `date` field contains ISO8601 date_ -- a record field is represented
+        as a `String` that contains a calendar date in the format
+        `"2019-03-03"`
 
 ``` {.json file="test/example1c.json" .hidden}
 "2019-03-03"
@@ -219,7 +216,7 @@ example1b_repr = HRef "Int"
 ```
 
 ``` {.haskell file=test/example1c.result .hidden }
-newtype Example = Example Date
+newtype Example1c = Example1c Date
 ```
 
 ```{.haskell #representation-examples .hidden }
@@ -241,7 +238,7 @@ example1c_repr = HRef "Date"
 ```
 
 ```{.haskell file=test/example2.result}
-newtype Example = Example { page_size :: Maybe Int }
+newtype Example2 = Example2 { page_size :: Maybe Int }
 ```
 
 ```{.haskell #representation-examples .hidden }
@@ -271,7 +268,7 @@ example2_repr = HADT [
 ```
 
 ``` {.haskell file=test/example3.result}
-newtype Example = Example (String :|: Int)
+newtype Example3 = Example3 (String :|: Int)
 ```
 
 ```{.haskell #representation-examples .hidden }
@@ -314,6 +311,14 @@ example4_repr = HADT [
   ]
 ```
 
+```{.haskell file=test/example4.result}
+newtype Example4 =
+    Message { message :: String
+            , uid     :: Int    }
+  | Error   { error   :: String
+            , code    :: Int    }
+```
+
 
 5.  Arrays corresponding to records[^2]:
 
@@ -328,7 +333,7 @@ example4_repr = HADT [
 ``` {.haskell .hidden file=test/example5.result}
 data Examples = Examples [Example]
 
-data Example = Example {
+data Example5 = Example5 {
     col1 :: Int
   , col2 :: String
   , col3 :: Maybe Date
@@ -369,17 +374,6 @@ example5_repr = HADT [
 }
 ```
 
-``` {.haskell .hidden file=test/example6.result}
-newtype Examples = Example (Map String Example)
-
-data Example {
-    size       :: Int
-  , height     :: Int
-  , difficulty :: Double
-  , previous   :: String
-  }
-```
-
 ```{.haskell #representation-examples .hidden }
 example6_values :: [Value]
 example6_values = [readJSON $(embedFile "test/example6.json")]
@@ -394,8 +388,6 @@ example6_repr = HApp
               ,("previous",   HRef "String")]
     ]]
 ```
-
-::: {#example:nonmonotonic-inference}
 
 It should be noted that the last example presented above requires
 Haskell representation inference to be non-monotonic,
@@ -418,10 +410,12 @@ It also suggests that a user might decide to explicitly add evidence for
 one of alternative representations in the case when samples are insufficient.
 (like in case of a single element dictionary.)
 
+::: { #sec:nonmonotonic-inference }
+
 ```{.haskell file=test/example6-multi-key.result}
-data Example    =
-     Example (Map Hex
-                  ExampleElt)
+data ExampleMap    =
+     ExampleMap (Map Hex
+                     ExampleElt)
 data ExampleElt = ExampleElt {
     size       :: Int
   , height     :: Int
@@ -509,10 +503,8 @@ We use neutral element of the `Monoid` to indicate
 a type corresponding to no observations:
 
 ``` {.haskell file=refs/Data/Monoid.hs}
-class Semigroup ty
-   => Monoid    ty
-  where
-    mempty :: ty
+class Semigroup ty => Monoid ty where
+    mempty ::   ty
 ```
 In other words, we can say that `mempty` corresponds to situation wher **no information was accepted** about a possible
 value (no term seen, not even a null). It is neutral element of `Typelike`.
@@ -553,7 +545,7 @@ Languages with dynamic type discipline will treat `beyond` as untyped,
 dynamic value, and `mempty` again is a fully unknown, polymorphic value (like a type of an element of an empty array)[^8].
 
 ```{.haskell #typelike }
-class (Monoid t, Eq t,Show t)
+class (Monoid   t, Eq t, Show t)
    =>  Typelike t where
    beyond :: t -> Bool
 ```
@@ -616,8 +608,8 @@ assumed for type constraints here[@subtyping-lattice].
 
 That is because this requirement is valid only for strict type
 constraint inference, not for a more general type inference as a
-learning problem. As we saw on `ExampleRowConstraint`
-in [@#example:nonmonotonic-inference], we need non-monotonic
+learning problem. As we saw on `ExampleMap`
+in [@sec:examples], we need non-monotonic
 inference when dealing with alternative representations.
 
 It should be noted that this approach significantly generalized the assumptions compared
@@ -678,14 +670,12 @@ In this case, we can use special generator called `arbitraryBeyond` that generat
 set:
 
 ``` {#types-spec .haskell}
-{-
 beyond_contains_all_terms2 :: forall   ty term.
                              (Typelike ty
                              ,Types    ty term)
                            => term -> _
 beyond_contains_all_terms2 term =
   forAll arbitraryBeyond $ (`check` term)
-  -}
 ```
 
 We state the most intuitive rule for typing: a type inferred from a term, must
@@ -740,13 +730,13 @@ The last law states that the terms are correctly typechecked
 after adding more information into a single type.
 (For inference relation, it would be described as _principal type property_.)
 
-``` {#types-spec .haskell .hidden}
+```{.haskell #types-spec .hidden}
 fusion_keeps_terms :: forall   ty v.
                      (Typelike ty
                      ,ty `Types` v)
                    => v -> ty -> ty -> Property
 ```
-``` {#types-spec .haskell}
+```{.haskell #types-spec}
 fusion_keeps_terms v ty1 ty2 = do
   check ty1 v || check ty2 v ==>
     check (ty1 <> ty2) v
@@ -1367,8 +1357,6 @@ instance Semigroup ArrayConstraint where
     , rowCase   = ((<>) `on` rowCase  ) a1 a2
     }
 
-<<row-constraint>>
-
 instance ArrayConstraint `Types` Array
   where
     infer vs =
@@ -1853,21 +1841,21 @@ Bibliography {#bibliography .unnumbered}
 # Appendix: definition module headers {#appendix-module-headers .unnumbered}
 
 ```{.haskell language="Haskell" file=src/Unions.hs}
-{-# language AllowAmbiguousTypes    #-}
-{-# language DeriveGeneric          #-}
-{-# language DuplicateRecordFields  #-}
-{-# language FlexibleInstances      #-}
+{-# language AllowAmbiguousTypes        #-}
+{-# language DeriveGeneric              #-}
+{-# language DuplicateRecordFields      #-}
+{-# language FlexibleInstances          #-}
 {-# language GeneralizedNewtypeDeriving #-}
-{-# language MultiParamTypeClasses  #-}
-{-# language NamedFieldPuns         #-}
-{-# language PartialTypeSignatures  #-}
-{-# language ScopedTypeVariables    #-}
-{-# language TypeOperators          #-}
-{-# language RoleAnnotations        #-}
-{-# language ViewPatterns           #-}
-{-# language RecordWildCards        #-}
-{-# language OverloadedStrings      #-}
-{-# ghc_options -Wno-orphans        #-}
+{-# language MultiParamTypeClasses      #-}
+{-# language NamedFieldPuns             #-}
+{-# language PartialTypeSignatures      #-}
+{-# language ScopedTypeVariables        #-}
+{-# language TypeOperators              #-}
+{-# language RoleAnnotations            #-}
+{-# language ViewPatterns               #-}
+{-# language RecordWildCards            #-}
+{-# language OverloadedStrings          #-}
+{-# ghc_options -Wno-orphans            #-}
 module Unions where
 
 import           Control.Arrow(second)
@@ -1883,19 +1871,19 @@ import qualified Data.Set  as Set
 import           Data.Set(Set)
 import           Data.Scientific
 import           Data.String
---import           Data.List(sortBy)
 import qualified Data.HashMap.Strict as Map
 import           Data.HashMap.Strict(HashMap)
-import           GHC.Generics(Generic)
+import           GHC.Generics       (Generic)
 import           Data.Hashable
 import           Data.Typeable
-import Data.Time.Format(iso8601DateFormat,parseTimeM,defaultTimeLocale)
-import Data.Time.Calendar(Day)
-
+import           Data.Time.Format   (iso8601DateFormat,parseTimeM,defaultTimeLocale)
+import           Data.Time.Calendar (Day)
+import           Missing
 
 <<freetype>>
 <<typelike>>
 <<basic-constraints>>
+<<row-constraint>>
 <<array-constraint>>
 <<object-constraint>>
 <<presence-absence-constraints>>
@@ -1904,8 +1892,6 @@ import Data.Time.Calendar(Day)
 <<counted>>
 <<typecost>>
 <<representation>>
-
-<<missing>>
 ```
 
 # Appendix: test suite {.unnumbered}
@@ -2583,7 +2569,7 @@ Appendix: Missing pieces of code {#appendix-missing-pieces-of-code .unnumbered}
 In order to represent `FreeType` for the `Value`,
 we need to add `Ord` instance for it:
 
-``` {#missing .haskell}
+```{.haskell #missing}
 instance Ord       Value where
   compare = compare `on` hash
 ```
@@ -2606,9 +2592,69 @@ isValidEmail = Text.Email.Validate.isValid
            . Text.encodeUtf8
 ```
 
-Appendix: Damas-Milner as `Typelike` {#appendix-hindley-milner-as-typelike .unnumbered}
-======================================
+For the definition of the `Hashable` we can just fold values to a list
+or use `Generic` instance.
 
+```{#missing .haskell}
+instance (Hashable          k
+         ,Hashable            v)
+      =>  Hashable (HashMap k v) where
+  hashWithSalt s = hashWithSalt s
+                 . Foldable.toList
+
+instance Hashable           v
+      => Hashable (V.Vector v) where
+  hashWithSalt s = hashWithSalt s
+                 . Foldable.toList
+
+--instance Hashable Scientific where
+instance Hashable Value where
+```
+
+Then we put all the missing code in the module:
+
+```{.haskell language="Haskell" file=src/Missing.hs}
+{-# language AllowAmbiguousTypes        #-}
+{-# language DeriveGeneric              #-}
+{-# language DuplicateRecordFields      #-}
+{-# language FlexibleInstances          #-}
+{-# language GeneralizedNewtypeDeriving #-}
+{-# language MultiParamTypeClasses      #-}
+{-# language NamedFieldPuns             #-}
+{-# language PartialTypeSignatures      #-}
+{-# language ScopedTypeVariables        #-}
+{-# language TypeOperators              #-}
+{-# language RoleAnnotations            #-}
+{-# language ViewPatterns               #-}
+{-# language RecordWildCards            #-}
+{-# language OverloadedStrings          #-}
+{-# ghc_options -Wno-orphans            #-}
+module Missing where
+
+import           Control.Arrow(second)
+import           Data.Aeson
+import           Data.Maybe(isJust,catMaybes)
+import qualified Data.Foldable as Foldable
+import           Data.Function(on)
+import           Data.Text(Text)
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding  as Text
+import qualified Text.Email.Validate(isValid)
+import qualified Data.Set  as Set
+import           Data.Set(Set)
+import           Data.Scientific
+import           Data.String
+import qualified Data.Vector         as V
+import qualified Data.HashMap.Strict as Map
+import           Data.HashMap.Strict(HashMap)
+import           GHC.Generics       (Generic)
+import           Data.Hashable
+import           Data.Typeable
+import           Data.Time.Format   (iso8601DateFormat,parseTimeM,defaultTimeLocale)
+import           Data.Time.Calendar (Day)
+
+<<missing>>
+```
 
 [^2]: Which is considered a bad practice; however, it is part of
     real-life APIs. We may need to make it optional using the
