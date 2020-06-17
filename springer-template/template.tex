@@ -17,6 +17,10 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 
+% proof environment
+\usepackage{proof}
+\usepackage{semantic}
+
 % to typeset URLs, URIs, and DOIs
 \usepackage{url}
 \def\UrlFont{\rmfamily}
@@ -95,14 +99,14 @@ $if(subtitle)$
 $endif$
 
 $if(author)$
-\author{$for(author)$ $author.name$ $if(author.affiliation.number)$\inst{1}$endif$$sep$ \and $endfor$}
+\author{$for(author)$ $author.name$ $if(author.affiliation.number)$\inst{$author.affiliation.number$}$endif$$sep$ \and $endfor$}
 $endif$
 
 $if(affiliation)$
 $for(affiliation)$
-\institute{$if(affiliation.institution)$$affiliation.institution$$endif$
-$if(affiliation.email)$\email{$affiliation.email$}$endif$
-$if(affiliation.institution)$\texttt{$affiliation.url$}$endif$ $sep$ \and $endfor$}
+\institute{$if(affiliation.institution)$$affiliation.institution$,\\
+           $endif$ $if(affiliation.email)$\email{$affiliation.email$},\\
+           $endif$$if(affiliation.url)$WWW company page: \texttt{$affiliation.url$}$endif$} $sep$ \and $endfor$
 $endif$
 
 \maketitle
