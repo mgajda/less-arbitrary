@@ -22,7 +22,8 @@ OPTIONS=--mathml				\
 #	--listings \
 #	--filter pandoc-citeproc		\
 
-TEMPLATE=acm-template/new-template.tex
+#TEMPLATE=acm-template/new-template.tex
+TEMPLATE=springer-template/template.tex
 GNUPLOT=gnuplot
 
 all: out ${PDF} ${HTML} ${TEX} ${TPDF} ${DOCX} debug.out
@@ -50,6 +51,7 @@ debug.out:
 ${TEX}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${BIBLIO}
 	pandoc ${OPTIONS} \
 		--template=${TEMPLATE}			\
+		--pdf-engine=xelatex                    \
 		--csl=templates/acm-sig-proceedings.csl	\
 		--standalone \
 		-o ${TEX} ${SRC}
@@ -63,8 +65,8 @@ ${PDF}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${BIBLIO}
 	pandoc ${OPTIONS} \
 		--template=${TEMPLATE}		\
 		--pdf-engine=xelatex		\
+	        --csl=templates/acm-sig-proceedings.csl	\
 		-o ${PDF} ${SRC}
-	--csl=templates/acm-sig-proceedings.csl	\
 
 #${LHS}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${BIBLIO}
 #	pandoc ${OPTIONS} \
