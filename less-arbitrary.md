@@ -159,7 +159,7 @@ We track the spending in the usual way:
 ```{.haskell #spend}
 spend :: Cost -> CostGen ()
 spend c = CostGen $ State.modify (-c+)
-````
+```
 
 To make generation easier, we introduce `budget check` operator:
 ```{.haskell #budget}

@@ -4,9 +4,10 @@ shorttitle: "Perfect union type"
 subtitle: "Functional pearl"
 author:
   - name: Michał J. Gajda
-    email: mjgajda@migamake.com
-    affiliation:
-      institution: Migamake Pte Ltd
+affiliation:
+  institution: "Migamake Pte Ltd"
+  email:        mjgajda@migamake.com
+  url:         "https://migamake.com"
 tags:
   - Haskell
   - JSON
@@ -37,6 +38,9 @@ prologue: |
   \let\longtable\tabular
   \let\endlongtable\endtabular
   \renewcommand{\url}[1]{\href{#1}{[Link]}}
+  \pagestyle{plain}
+  \usepackage{lineno}
+  \linenumbers
 link-citations: true
 tables: true
 listings: true
@@ -121,10 +125,16 @@ and completely preserve information in face of inconsistencies nor errors,
 beyond using `bottom` and expanding to *infamous undefined
 behaviour*[@undefined1,@undefined2,@undefined3].
 
-It is also worth noting that traditional Damas-Milner type disciplines embrace the laws of soundness,
-and subject-reduction.
+It is also worth noting that traditional Damas-Milner type disciplines enjoy decidability,
+and embrace the laws of soundness, and subject-reduction.
 However these laws often prove too strict during type system extension,
-and are abandoned in practice of larger systems[@GHCZurihac].
+dependent type systems often abandon subject-reduction,
+and practical programming language type systems are either undecidable[@GHCZurihac],
+or even sometimes even unsound[@typescript-soundness].
+
+We propose a framework that preserves the soundness in inference,
+while making usability compromises by proposing approximations that
+are consistent with the assumed rules.
 
 Motivation
 ==========
@@ -492,7 +502,9 @@ If an inference fails, it is always possible to correct it by introducing
 an additional observation (example).
 To denote unification operation, or **information fusion** between two type descriptions,
 we use a `Semigroup` interface operation `<>` to merge types inferred
-from different observations. If `Typelike` is semilattice, then `<>` is join operation.
+from different observations. If `Typelike` is semilattice, then `<>` is meet operation (least upper bound).
+Note that this approach is dual to traditional unification that _narrows down_ solutions
+and thus is join operation (greatest lower bound).
 
 ``` {.haskell file=refs/Data/Semigroup.hs}
 class Semigroup ty where
@@ -506,10 +518,12 @@ a type corresponding to no observations:
 class Semigroup ty => Monoid ty where
     mempty ::   ty
 ```
-In other words, we can say that `mempty` corresponds to situation wher **no information was accepted** about a possible
+In other words, we can say that `mempty` (or `bottom`) of the corresponds to situation wher **no information was accepted** about a possible
 value (no term seen, not even a null). It is neutral element of `Typelike`.
-For example, an empty array \[\]
+For example, an empty array `[]`
 can be referred to as an array type with `mempty` as an element type.
+This represents the view that `<>` always **gathers more information** about the type,
+as opposed to the traditional unification that always **narrows down** possible solutions.
 
 We describe the laws as QuickCheck [@quickcheck] properties so that
 unit testing can be implemented to detect obvious violations.
@@ -520,16 +534,18 @@ In the domain of permissive union types, a `beyond` set represents
 the case of **everything permitted** or a fully dynamic value, when we gather
 the information that permits every possible value inside a type. At the first
 reading, it may be deemed that a `beyond` set should comprise of
-only one single element -- the `top` one.
+only one single element -- the `top` one, but this is to narrow for our purpose
+of _monotonically gathering information_.
+(_Complete bounded semilattice_.)
 
 However, since we defined **unification** operator `<>` as
-**information fusion**, we may encounter difficulties in assuring that no
+**information fusion** (also marked as $\diamond$), we may encounter difficulties in assuring that no
 information has been lost during the unification^[Examples will be provided later.].
 
 
 Moreover, strict type systems usually specify more than one error value,
 as it should contain information about error messages and to keep track
-from where an error has been originated^[7].
+from where an error has been originated[^7].
 
 This observation lets us go well beyond typing statement of gradual type inference
 as discovery problem from partial information[@gradual-typing].
@@ -549,7 +565,6 @@ class (Monoid   t, Eq t, Show t)
    =>  Typelike t where
    beyond :: t -> Bool
 ```
-
 
 In addition, the standard laws for a **commutative** `Monoid`, we state
 the new law for the `beyond` set: The `beyond` set is always **closed to information
@@ -675,7 +690,7 @@ beyond_contains_all_terms2 :: forall   ty term.
                              ,Types    ty term)
                            => term -> _
 beyond_contains_all_terms2 term =
-  forAll arbitraryBeyond $ (`check` term)
+  Test.QuickCheck.forAll arbitraryBeyond $ pure . (`check` term)
 ```
 
 We state the most intuitive rule for typing: a type inferred from a term, must
@@ -1093,7 +1108,7 @@ When presented with several alternate representations
 from the same set of observations, we will use this function
 to select the least complex representation of the type.
 For flat constraints as above, we infer that they
-offer no optionality when no observations occured (cost of $0$),
+offer no optionality when no observations occured (cost of `mempty` is $0$),
 otherwise the cost is $1$.
 
 Considering that types `beyond` are to be avoided,
@@ -1156,9 +1171,10 @@ The typing of `Map` would be specified as follows:
 data MappingConstraint =
   MappingConstraint {
     keyConstraint   :: StringConstraint
-  , valueConstraint :: UnionType
-  }
-  | MappingNever
+  , valueConstraint :: UnionType        }
+  | MappingNever -- mempty
+```
+``` {#object-constraint .haskell .hidden}
   deriving (Eq, Show, Generic, Typeable)
 
 instance Monoid MappingConstraint where
@@ -1209,27 +1225,43 @@ object as a record of values:
 
 ``` {.haskell #object-constraint}
 data RecordConstraint =
-    RCTop
-  | RCBottom
+    RCTop    -- beyond
+  | RCBottom -- mempty
   | RecordConstraint {
       fields :: HashMap Text UnionType
     } deriving (Show,Eq,Generic, Typeable)
+```
+Note that `RCTop` never actually occurs during inference.
+That is, we could have represented the `RecordConstraint`
+as a `Typelike` with an empty `beyond` set.
 
-instance Typelike RecordConstraint where
-  beyond = (==RCTop)
-
+``` {#object-constraint .haskell}
 instance Semigroup   RecordConstraint where
+  RecordConstraint     a  <>
+    RecordConstraint     b = RecordConstraint $
+    Map.unionWith (<>) a b
+```
+
+``` {#object-constraint .haskell .hidden}
   RCBottom <> a        = a
   a        <> RCBottom = a
   RCTop    <> _        = RCTop
   _        <> RCTop    = RCTop
-  a        <> b        = RecordConstraint $
-    Map.unionWith (<>) (fields a)
-                       (fields b)
+
+instance Typelike RecordConstraint where
+  beyond = (==RCTop)
 
 instance Monoid      RecordConstraint where
   mempty = RCBottom
 
+instance TypeCost RecordConstraint where
+  typeCost RCBottom = 0
+  typeCost RCTop    = inf
+  typeCost RecordConstraint { fields } =
+    Foldable.foldMap typeCost fields
+```
+
+``` {#object-constraint .haskell}
 instance RecordConstraint `Types` Object
   where
     infer =  RecordConstraint
@@ -1248,11 +1280,6 @@ instance RecordConstraint `Types` Object
                               obj
     check _  _ = False
 
-instance TypeCost RecordConstraint where
-  typeCost RCBottom = 0
-  typeCost RCTop    = inf
-  typeCost RecordConstraint { fields } =
-    Foldable.foldMap typeCost fields
 ```
 
 Observing that the two abstract domains considered above are
@@ -1262,9 +1289,10 @@ in a record[^13] as follows:
 ``` {#object-constraint .haskell}
 data ObjectConstraint = ObjectConstraint {
     mappingCase :: MappingConstraint
-  , recordCase  :: RecordConstraint
-  } 
-  | ObjectNever
+  , recordCase  :: RecordConstraint  } 
+  | ObjectNever -- mempty
+```
+``` {#object-constraint .haskell .hidden}
   deriving (Eq,Show,Generic)
 
 instance Semigroup ObjectConstraint where
@@ -1335,8 +1363,9 @@ Here, we specify the records for two different possible representations:
 data ArrayConstraint  = ArrayConstraint {
     arrayCase :: UnionType
   , rowCase   :: RowConstraint
-  }
-  | ArrayNever
+  } | ArrayNever -- mempty
+```
+``` {.haskell #array-constraint .hidden}
   deriving (Show, Eq, Generic)
 
 instance Monoid ArrayConstraint where
@@ -1356,14 +1385,19 @@ instance Semigroup ArrayConstraint where
       arrayCase = ((<>) `on` arrayCase) a1 a2
     , rowCase   = ((<>) `on` rowCase  ) a1 a2
     }
+```
 
+Semigroup operation just merges information on the components,
+and the same is done when inferring types or checking them:
+
+``` {.haskell #array-constraint}
 instance ArrayConstraint `Types` Array
   where
     infer vs =
       ArrayConstraint
         (mconcat (infer <$>
                Foldable.toList vs))
-        (infer              vs)
+        (infer                 vs)
     check ArrayNever           vs = False
     check ArrayConstraint {..} vs =
          and (check arrayCase <$>
@@ -1373,9 +1407,9 @@ instance ArrayConstraint `Types` Array
 
 For the arrays, we plan to again choose only one
 of possible representations, so the cost of optionality
-is the lesser of the costs of the representation-specific constraints:
+is the lesser of the costs of the representation-specific constraints.
 
-```{.haskell #object-constraint}
+```{.haskell #object-constraint .hidden}
 instance TypeCost ArrayConstraint where
   typeCost ArrayNever = 0
   typeCost ArrayConstraint {..} =
@@ -1390,10 +1424,9 @@ all rows, which is represented by escaping the `beyond` set
 whenever there is an uneven number of columns.
 
 ``` {#row-constraint .haskell}
-data RowConstraint =
-     RowTop
-   | RowNever
-   | Row       [UnionType]
+data RowConstraint = RowTop | RowNever | Row [UnionType]
+```
+``` {#row-constraint .haskell .hidden}
    deriving (Eq,Show,Generic)
 
 instance Typelike RowConstraint where
@@ -1401,7 +1434,14 @@ instance Typelike RowConstraint where
 
 instance Monoid RowConstraint where
   mempty = RowNever
+```
 
+Row constraint remains valid only if both
+constraint describe record of the same length,
+otherwise we yield `RowTop` to indicate that it is
+no longer valid.
+
+``` {#row-constraint .haskell .hidden}
 instance RowConstraint `Types` Array where
   infer = Row
         . Foldable.toList
@@ -1414,12 +1454,10 @@ instance RowConstraint `Types` Array where
         zipWith check                 rs
                      (Foldable.toList vs)
   check  _        _ = False
+```
 
+``` {#row-constraint .haskell .hidden}
 instance Semigroup RowConstraint where
-  RowTop    <> _             = RowTop
-  _         <> RowTop        = RowTop
-  RowNever  <> a             = a
-  a         <> RowNever      = a
   Row bs    <> Row cs
     | length bs /= length cs = RowTop
   Row bs    <> Row cs        =
@@ -1427,19 +1465,19 @@ instance Semigroup RowConstraint where
 ```
 
 In other words, `RowConstraint` is a *levitated
-semilattice* with a neutral element [@levitated-lattice] over the content type
+semilattice*[@levitated-lattice]^[_Levitated lattice_ is created by appending distinct `bottom` and `top` to a set that does not possess them by itself.] with a neutral element over the content type
 that is a list of `UnionType` objects.
 
-``` {#row-constraint-standard-rules .haskell .hidden}
-  RowNever <> r        = r
-  r        <> RowNever = r
-  RowTop   <> _        = RowTop
-  _        <> RowTop   = RowTop
+``` {#row-constraint .haskell .hidden}
+  RowTop    <> _             = RowTop
+  _         <> RowTop        = RowTop
+  RowNever  <> a             = a
+  a         <> RowNever      = a
 ```
 
-The cost of the row constraint is inferred in a similar manner
-as the cost of the record constraint:
-```{.haskell #row-constraint}
+```{.haskell #row-constraint .hidden}
+-- The cost of the row constraint is inferred by summing up costs
+-- as the cost of the record constraint.
 instance TypeCost RowConstraint where
   typeCost  RowNever  = 0
   typeCost  RowTop    = inf
@@ -1604,18 +1642,12 @@ number of samples supporting each alternative type constraint.
 To explain this, the other example can be considered:
 
 ``` {.json}
-{"samples":
-[{"error"  : "Authorization failed",
-  "code"   :  401}
-,{"message": "Where can I submit my proposal?",
-     "uid" : 1014}
-,{"message": "Sent it to HotCRP",
-     "uid" :   93}
-,{"message": "Thanks!",
-     "uid" : 1014}
-,{"error"  : "Authorization failed",
-     "code":  401}
-]}
+{"history": [
+   {"error"  : "Authorization failed",            "code":  401}
+  ,{"message": "Where can I submit my proposal?", "uid" : 1014}
+  ,{"message": "Sent it to HotCRP",               "uid" :   93}
+  ,{"message": "Thanks!",                         "uid" : 1014}
+  ,{"error"  : "Authorization failed",            "code":  401}]}
 ```
 
 First, we need to identify it as a list of similar elements. 
@@ -1628,8 +1660,8 @@ and attempt to minimize the term.
 Next step is to detect the similarities between type descriptions
 introduced for different parts of the term:
 
-``` {.json}
-{"samples"      :  [...],
+```{.json}
+{"history"      : [...],
  "last_message" : {"message": "Thanks!",
                       "uid" : 1014}
 }
@@ -1638,54 +1670,58 @@ introduced for different parts of the term:
 We can add the auxiliary information about a number of samples observed,
 and the constraint remains a `Typelike` object:
 
-``` {#counted .haskell}
+```{#counted .haskell}
 data Counted a =
   Counted { count      :: Int
-          , constraint :: a
-          } deriving (Eq, Show, Generic)
+          , constraint :: a   }
+```
 
+```{#counted .haskell .hidden}
+    deriving (Eq, Show, Generic)
+```
+
+```{#counted .haskell}
 instance Semigroup          a
       => Semigroup (Counted a) where
   a <> b = Counted (count      a +  count      b)
                    (constraint a <> constraint b)
-
 instance Monoid  a
       => Monoid (Counted a) where
   mempty = Counted 0 mempty
-
+```
+``` {.haskell #counted .hidden}
 instance Typelike          a
       => Typelike (Counted a) where
   beyond Counted {..} = beyond constraint
-
-instance          ty  `Types` term
-      => (Counted ty) `Types` term where
-  infer term = Counted 1 $ infer term
-  check (Counted _ ty) term = check ty term
 
 instance TypeCost          ty
       => TypeCost (Counted ty) where
   typeCost (Counted _ ty) = typeCost ty
 ```
 
+``` {.haskell #counted .hidden}
+instance          ty  `Types` term
+      => (Counted ty) `Types` term where
+  infer term = Counted 1 $ infer term
+  check (Counted _ ty) term = check ty term
+```
+
 We can interconnect `Counted` as parametric functor to select constraints to
 track auxiliary information.
 
 It should be noted that `Counted` constraint is the first example that
-does not correspond to a semilattice, that is `a<>a/=a`.
-
-
-This is because it is a `Typelike` object; however, it is not
-a type constraint in a conventional sense. Instead it counts the
-number of samples observed for the constraint inside so that we can decide
+does not correspond to a semilattice, that is `a<>a`$\neq$`a`.
+This is natural for a `Typelike` object; it is not
+a type constraint in a conventional sense, just accumulation of knowledge.
+It counts the number of samples observed for the constraint inside so that we can decide
 on which alternative representation is best supported by evidence.
 
 Therefore, at each step, we may need to maintain a **cardinality** of
 each possible value, and being provided with sufficient number of
-samples, we may attempt to detect [^15].
-
+samples, we may attempt to detect[^15].
 To preserve efficiency, we may need to merge whenever the number of
-alternatives in a multiset crosses the threshold. [^16] We can attempt to
-narrow strings only in the cases when cardinality crosses the threshold [^17].
+alternatives in a multiset crosses the threshold[^16]. We can attempt to
+narrow strings only in the cases when cardinality crosses the threshold[^17].
 
 # Selecting representations {#sec:select-representation}
 
@@ -2592,10 +2628,7 @@ isValidEmail = Text.Email.Validate.isValid
            . Text.encodeUtf8
 ```
 
-For the definition of the `Hashable` we can just fold values to a list
-or use `Generic` instance.
-
-```{#missing .haskell}
+```{#not-missing .haskell}
 instance (Hashable          k
          ,Hashable            v)
       =>  Hashable (HashMap k v) where
@@ -2607,8 +2640,8 @@ instance Hashable           v
   hashWithSalt s = hashWithSalt s
                  . Foldable.toList
 
---instance Hashable Scientific where
-instance Hashable Value where
+-- instance Hashable Scientific where
+-- instance Hashable Value where
 ```
 
 Then we put all the missing code in the module:
