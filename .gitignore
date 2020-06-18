@@ -5,3 +5,7 @@ debug.json
 refs/
 dist/
 dist-newstyle/
+.entangled
+src/
+test
+union-types.cabal
