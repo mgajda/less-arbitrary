@@ -8,6 +8,7 @@ affiliation:
   institution: "Migamake Pte Ltd"
   email:        mjgajda@migamake.com
   url:         "https://migamake.com"
+review: true
 tags:
   - Haskell
   - JSON
@@ -22,9 +23,9 @@ abstract: |
   The framework poses a union type
   inference as a learning problem
   from multiple examples.
-  The mathematical framework is quite
+  The categorical framework is
   generic, and easily extensible.
-date:   2020-04-04
+date:   2020-06-19
 description: |
   Proposes a new framework for union types
   that uses monoid and complete functions,
@@ -49,7 +50,6 @@ acks: |
 
   The text was prepared with great help of bidirectional literate programming[@literate-programming] tool[@entangled],
   Pandoc[@pandoc] markdown publishing system and live feedback from GHCid[@ghcid].
-
 ---
 
 Introduction
@@ -82,11 +82,12 @@ F\# type providers for JSON facilitate deriving a schema
 automatically; however, a type system is *ad-hoc*[@type-providers-f-sharp].
 The other attempt to automatically infer schemas has been introduced in the PADS project
 [@pads]. Nevertheless, it has not specified a generalized type-system design methodology.
-
 One approach uses Markov chains to derive JSON types [@quicktype].
 This approach requires considerable engineering time due to the implementation
 unit tests in a case-by-case mode, instead of formulating laws applying to all types.
 Moreover, this approach lacks a sound underlying theory.
+Regular expression types were also used to type XML documents[@xduce], which does not allow
+for selecting alternative representation.
 Therefore, we summarize that there are several previously introduced approaches that provide partially
 satisfactory results. In the present study, we aim to expand these proposals to enable systematic
 addition of features, and automatic validation of types.
@@ -453,13 +454,13 @@ In the domain of permissive union types, a `beyond` set represents
 the case of **everything permitted** or a fully dynamic value, when we gather
 the information that permits every possible value inside a type. At the first
 reading, it may be deemed that a `beyond` set should comprise of
-only one single element -- the `top` one, but this is to narrow for our purpose
-of _monotonically gathering information_.
-(_Complete bounded semilattice_.)
+only one single element -- the `top` one (arriving at complete bounded semilattice), but this is to narrow for our purpose
+of _monotonically gathering information_
 
-However, since we defined **unification** operator `<>` as
-**information fusion** (also marked as $\diamond$), we may encounter difficulties in assuring that no
-information has been lost during the unification^[Examples will be provided later.].
+
+However, since we defined **generalization** operator `<>` as
+**information fusion** (or **unification** in categorically dual case of a strict type systems.), we may encounter difficulties in assuring that no
+information has been lost during the generalization^[Examples will be provided later.].
 Moreover, strict type systems usually specify more than one error value,
 as it should contain information about error messages and to keep track
 from where an error has been originated[^7].
@@ -468,18 +469,15 @@ This observation lets us go well beyond typing statement of gradual type inferen
 as discovery problem from partial information[@gradual-typing].
 Here we consider type inference as a **learning problem**,
 and allows finding the common ground between the dynamic and the static typing
-discipline.
-The languages relying on the static type discipline usually consider `beyond` as a set of
+discipline. The languages relying on the static type discipline usually consider `beyond` as a set of
 error messages, as a value should correspond to a statically assigned and
-a **narrow** type. In this setting `mempty` as a fully polymorphic type `forall a. a`.
+a **narrow** type. In this setting `mempty` would be fully polymorphic type $\forall{}a. a$.
 
 Languages with dynamic type discipline will treat `beyond` as untyped,
 dynamic value, and `mempty` again is a fully unknown, polymorphic value (like a type of an element of an empty array)[^8].
 
 ```{.haskell #typelike }
-class (Monoid   t, Eq t, Show t)
-   =>  Typelike t where
-   beyond :: t -> Bool
+class (Monoid t, Eq t, Show t) => Typelike t where beyond :: t -> Bool
 ```
 
 In addition, the standard laws for a **commutative** `Monoid`, we state
@@ -553,8 +551,7 @@ is formulated as consistency between these two operations.
 
 
 ``` {.haskell #typelike }
-class Typelike ty
-   => ty `Types` val where
+class Typelike ty => ty `Types` val where
    infer ::       val -> ty
    check :: ty -> val -> Bool
 ```
@@ -621,6 +618,8 @@ inferred_type_contains_its_term term =
 ```
 
 ```{=latex}
+\begin{figure*}[t]
+\begin{center}
 % https://tikzcd.yichuanshen.de/#N4Igdg9gJgpgziAXAbVABwnAlgFyxMJZAJgBpiBdUkANwEMAbAVxiRAB12BbOnAC1zAAKgE80MAL4B9AIwAeAHyce-QaPHTiICaXSZc+QigAM5KrUYs2y3gJzCxk2dt0gM2PASIAWM9XrMrIgc3LZqjpoueh6GRGTe5gFWwTaq9kIATiwSUW76nkYkpMaJlkEhKnYOGrIABJx4XPD1oWnVTlo60QZeKL4J-mXWrVUAamWRXXkxvcimAxaBw5WC44HSMtrmMFAA5vBEoABmGRBcSDLUOBBIAMzUAEYwYFB3piBwAkc4SO8MWGBypBASBqHwYHRXsFgawrnQsAw2DDQSAGHQngwAAr5WLBAHYWC5E5nX5XG6Ie6LZIVML2ADG4LpAGtOLUkh0UU8XkhvABOKbE86Id7XO6PZ5QgC0fMGSxSI0EDJgzNZ7I2KLRGOxMyMIAyWF2fB+AtOQrIIFFFJNJMQlwt5Nu1qFdst73ZbEUqSq6g5TqQ5tdsupXvCNXkCg16JgWJxvT1BqNRNNPLJpKp5UUSZtvnt-qD5U4aCwUi01E10e1PV1DBg3yzQpzlrt7vlRecZajMZ1bH1huNrkFSAAbKnbfnlrTgACjjAMjk-YgAKyj80tmltaeznIdrWx3W9xML5e5inj+UremMlnsWoAd1wfAkrJ9Jfrw9HlLXIcvyuvd4fT43i+mw7hWe49gmxoUBIQA
 \begin{tikzcd}
                                                                                               &  & \mathit{Type}_1 \times \mathit{Type}_2 \arrow[dd, "<>"] \arrow[rrdd, "\pi_2"] \arrow[lldd, "\pi_1"']                                       &  &                                                                                           \\
@@ -629,6 +628,9 @@ inferred_type_contains_its_term term =
                                                                                               &  &                                                                                                                                            &  &                                                                                           \\
 \mathit{Value}_1 \arrow[uu, "\mathit{infer}"] \arrow[rr, "\mathit{check\ with}\ Type_1"']     &  & \mathit{True}                                                                                                                              &  & \mathit{Value}_2 \arrow[uu, "\mathit{infer}"'] \arrow[ll, "\mathit{check\ with}\ Type_2"]
 \end{tikzcd}
+\end{center}
+\caption{Categorical diagram for \texttt{Typelike}.}
+\end{figure*}
 ```
 
 ``` {#fig:type-commutes .dot width="45%" height="20%" .hidden}
@@ -722,7 +724,7 @@ For example, if `AType x y` types `{"a": X, "b": Y}`, then
 
 ### Flat type constraints
 
-Let us first consider typing of flat types: `String` and `Number` (also called _base types_.)
+Let us first consider typing of flat type: `String` (similar treatment should be given to the `Number`.type.)
 
 ```{.haskell #basic-constraints .hidden}
 
@@ -803,12 +805,7 @@ instance StringConstraint `Types` Text where
   check (SCEnum vs) s = s `Set.member` vs
   check  SCNever    _ = False
   check  SCAny      _ = True
-```
 
-Then, whenever unifying the `String` constraint, the following code can be
-executed:
-
-``` {#basic-constraints .haskell}
 instance Semigroup StringConstraint where
   SCNever    <>  a                                = a
   a          <>  SCNever                          = a
@@ -849,8 +846,6 @@ instance (Ord a, Eq a) => Semigroup (FreeType a) where
   Full <> _    = Full
   _    <> Full = Full
   a    <> b    = FreeType $ (Set.union `on` captured) a b
-instance (Ord a, Eq a)         => Monoid (FreeType a) where
-  mempty = FreeType Set.empty
 instance (Ord a, Eq a, Show a) => Typelike (FreeType a) where
   beyond = (==Full)
 
@@ -858,6 +853,11 @@ instance (Ord a, Eq a, Show a) => FreeType a `Types` a where
   infer                    = FreeType . Set.singleton
   check Full         _term = True
   check (FreeType s)  term = term `Set.member` s
+```
+
+```{#freetype .haskell .hidden}
+instance (Ord a, Eq a)         => Monoid (FreeType a) where
+  mempty = FreeType Set.empty
 ```
 
 This definition is deemed sound, and may be applicable
@@ -1159,7 +1159,15 @@ isNullable _                                 = False
 
 Observing that the two abstract domains considered above are
 independent, we can store the information about both options separately
-in a record[^13] as follows:
+in a record[^13]. It should be noted that this representation is similar to *intersection
+type*: any value that satisfies `ObjectConstraint` must
+conform to both `mappingCase`, and `recordCase`.
+Also this *intersection approach* in order to address
+alternative union type representations benefits from  *principal type property*,
+meaning that a principal type is used to simply acquire the information
+corresponding to different representations and handle it separately.
+Since we plan to choose only one representation for the object,
+we can say that minimum cost of this type is a minimum of component costs.
 
 ``` {#object-constraint .haskell}
 data ObjectConstraint = ObjectNever -- mempty
@@ -1192,22 +1200,12 @@ instance ObjectConstraint `Types` Object where
   check ObjectConstraint {..} v = check mappingCase v
                                && check recordCase  v
 ```
-
-It should be noted that this representation is similar to *intersection
-type*: any value that satisfies `ObjectConstraint` must
-conform to both `mappingCase`, and `recordCase`.
-Also this *intersection approach* in order to address
-alternative union type representations benefits from  *principal type property*,
-meaning that a principal type is used to simply acquire the information
-corresponding to different representations and handle it separately.
-Since we plan to choose only one representation for the object,
-we can say that minimum cost of this type is a minimum of component costs:
-
 ```{.haskell #object-constraint}
 instance TypeCost ObjectConstraint where
   typeCost ObjectConstraint {..} = typeCost mappingCase
                              `min` typeCost recordCase
 ```
+
 ```{.haskell #object-constraint .hidden}
   typeCost ObjectNever           = 0
 ```
@@ -1528,6 +1526,8 @@ data Counted a = Counted { count :: Int, constraint :: a }
 instance Semigroup a => Semigroup (Counted a) where
   a <> b = Counted (count      a +  count      b)
                    (constraint a <> constraint b)
+```
+```{#counted .haskell .hidden}
 instance Monoid a => Monoid (Counted a) where
   mempty = Counted  0 mempty
 ```
