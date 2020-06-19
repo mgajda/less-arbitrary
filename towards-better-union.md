@@ -108,10 +108,9 @@ of unification (as join operation), as well as complementary meet operation
 with the same properties.
 Semantic subtyping approach provides a characterization
 of set-based union, intersection, and complement types[@semantic-subtyping],
-which impose a structure comparable to Heyting algebra on the types.
-We are not aware of any attempts to generalize this approach beyond
-set-theoretic background into a category-theoretic laws, nor to relax assumptions
-to let go of idempotence, and a single $\top$ element.
+which allows it to model subtype containment on first order types and functions.
+This model relies on infinite model building of infinite sets in set theory,
+and thus is not immediately apparent as easy to implement.
 We are also not aware of a type inference framework that consistently
 and completely preserve information in face of inconsistencies nor errors,
 beyond using `bottom` and expanding to *infamous undefined
@@ -2478,12 +2477,6 @@ import           Data.Time.Calendar (Day)
 
 [^4]: Compiler feature of checking for unmatched cases.
 
-[^5]: As used by Aeson[@aeson] package.
-
-[^6]: JavaScript and JSON use a binary floating point instead; however
-    we follow the representation selected by `aeson` library that parses
-    JSON.
-
 [^7]: In this case: `beyond (Error _) = True | otherwise = False`.
 
 [^8]: May sound similar until we consider adding more information to the
@@ -2497,8 +2490,6 @@ import           Data.Time.Calendar (Day)
 
 [^11]: The shortest one according to the information complexity
        principle.
-
-[^12]: The implementation will make it optional with `--infer-int-ranges`.
 
 [^13]: The choice of representation will be explained later. Here we only
     consider acquiring information about possible values.
