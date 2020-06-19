@@ -1,5 +1,5 @@
-# ~\~ language=YAML filename=package.yaml
-# ~\~ begin <<towards-better-union.md|package.yaml>>[0]
+## ------ language="YAML" file="package.yaml" project://towards-better-union.md#2149
+
 name: union-types
 version: '0.1.0.0'
 category: Web
@@ -64,4 +64,4 @@ tests:
       - hashable
       - quickcheck-classes
       - quickcheck-instances
-# ~\~ end
+## ------ end

@@ -172,7 +172,7 @@ cheapVariants $$$? costlyVariants = do
      | budget > -10000      -> cheapVariants
      | otherwise            -> error $
        "Recursive structure with no loop breaker."
-       
+
 ```
 
 In order to conveniently define our budget generators,
@@ -603,6 +603,7 @@ instance (GLessArbitrary      a
 module Test.LessArbitrary(
     LessArbitrary(..)
   , oneof
+  , choose
   , CostGen(..)
   , (<$$$>)
   , ($$$?)
@@ -615,6 +616,7 @@ module Test.LessArbitrary(
   , withCost
   , elements
   , forAll
+  , sizedCost
   ) where
 
 import qualified Data.HashMap.Strict as Map

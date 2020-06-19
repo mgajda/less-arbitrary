@@ -107,10 +107,10 @@ which is more stringent that ours, since it requires idempotence
 of unification (as join operation), as well as complementary meet operation
 with the same properties.
 Semantic subtyping approach provides a characterization
-of set-based union, intersection, and complement types[@semantic-subtyping],
-which allows it to model subtype containment on first order types and functions.
-This model relies on infinite model building of infinite sets in set theory,
-and thus is not immediately apparent as easy to implement.
+of set-based union, intersection, and complement types[@semantic-subtyping; @semantic-subtyping2],
+which allows model subtype containment on first order types and functions.
+This model relies on building a model using infinite sets in a set theory,
+and thus is not immediately apparent as implementable^[Since we are interested in engineering the type system further, a simple implementation serves as ultimate evidence of extensibility.].
 We are also not aware of a type inference framework that consistently
 and completely preserve information in face of inconsistencies nor errors,
 beyond using `bottom` and expanding to *infamous undefined
@@ -495,7 +495,9 @@ beyond_is_closed :: forall   ty.
 ```
 ``` {.haskell #typelike-spec .hidden}
 beyond_is_closed ty1 ty2 = do
-  beyond (ty1 :: ty) ==> beyond (ty1 <> ty2)
+  if beyond (ty1 :: ty)
+     then label "beyond"     $ (ty1 <> ty2) `shouldSatisfy` beyond
+     else label "not beyond" $ True         `shouldBe`      True
 ```
 ```{.haskell #typelike-spec .hidden}
 typelikeLaws :: (Arbitrary a
@@ -581,21 +583,27 @@ beyond_contains_all_terms :: forall ty    term.
                             ,Show         term)
                           =>        ty -> term
                           -> Property
-beyond_contains_all_terms ty term = do
-  beyond ty ==>
-    term `shouldSatisfy` check ty
+beyond_contains_all_terms ty   term = do
+  if beyond               ty
+     then label "beyond"     $ term `shouldSatisfy` check ty
+     else label "not beyond" $ True `shouldBe`      True
 ```
 
 ``` {#types-spec .haskell .hidden}
 -- However, randomly drawing types for particular instances we might almost never get a type from the `beyond` set.
 -- In this case, we can use special generator called `arbitraryBeyond` that generates only the elements of the `beyond`
 -- set:
-beyond_contains_all_terms2 :: forall   ty term.
-                             (Typelike ty
-                             ,Types    ty term)
-                           => term -> _
+beyond_contains_all_terms2 :: forall          ty term.
+                             (Typelike        ty
+                             ,Types           ty term
+                             ,ArbitraryBeyond ty     )
+                           =>                    term
+                           -> Property
 beyond_contains_all_terms2 term =
-  Test.QuickCheck.forAll arbitraryBeyond $ pure . (`check` term)
+  Test.QuickCheck.property $
+    LessArbitrary.sizedCost $
+      LessArbitrary.forAll (arbitraryBeyond @ty) $
+        pure . (`check` term)
 ```
 
 ``` {#types-spec .haskell .hidden}
@@ -661,8 +669,9 @@ fusion_keeps_terms :: forall   ty v.
 ```
 ```{.haskell #types-spec .hidden}
 fusion_keeps_terms v ty1 ty2 = do
-  check ty1 v || check ty2 v ==>
-    check (ty1 <> ty2) v
+  if | check ty1 v -> label "first type checks value"  $ (ty1 <> ty2) `shouldSatisfy` (`check` v)
+     | check ty2 v -> label "second type checks value" $ (ty1 <> ty2) `shouldSatisfy` (`check` v)
+     | otherwise   -> label "no type checks value"     $ True `shouldBe` True
 ```
 
 The last law states that the terms are correctly typechecked
@@ -781,8 +790,8 @@ data StringConstraint = SCDate               | SCEmail
 instance StringConstraint `Types` Text where
   infer (isValidDate  -> True) = SCDate
   infer (isValidEmail -> True) = SCEmail
-  infer  _     = SCAny
-  infer  value = SCEnum $ Set.singleton value
+  infer  value                 = SCEnum $ Set.singleton value
+  infer  _                     = SCAny
 
   check  SCDate     s = isValidDate  s
   check  SCEmail    s = isValidEmail s
@@ -802,7 +811,7 @@ instance Semigroup StringConstraint where
   _          <>  SCAny                            = SCAny
   SCDate     <>  SCDate                           = SCDate
   SCEmail    <>  SCEmail                          = SCEmail
-  (SCEnum a) <> (SCEnum b) | length (a <> b) < 10 = SCEnum (a <> b)
+  (SCEnum a) <> (SCEnum b) | length (a `Set.union` b) < 10 = SCEnum (a <> b)
   _          <>  _                                = SCAny
 ```
 
@@ -1129,17 +1138,17 @@ instance RecordConstraint `Types` Object where
     infer = RecordConstraint    . Map.fromList
           . fmap (second infer) . Map.toList
     check RecordConstraint {fields} obj =
-         all (`elem` Map.keys (fields rc)) -- all object keys
+         all (`elem` Map.keys fields) -- all object keys
                     (Map.keys  obj)        -- present in type
       && and (Map.elems $ Map.intersectionWith -- values check
-                            check (fields rc) obj)
-      && all isNullable (Map.elems $ fields rc \\ obj)
+                            check fields obj)
+      -- && all isNullable (Map.elems $ fields `Map.difference` obj)
          -- absent values are nullable
 ```
-```{.haskell .hidden}
-    check _  _ = False
+```{.haskell .hidden #object-constraint}
     check RCTop    _ = True
     check RCBottom _ = False
+    check _  _ = False
     -- FIXME: treat extra keys!!!
 isNullable UnionType { unionNull = Present } = True
 isNullable _                                 = False
@@ -1677,7 +1686,7 @@ Bibliography {#bibliography .unnumbered}
 {-# language ViewPatterns               #-}
 {-# language RecordWildCards            #-}
 {-# language OverloadedStrings          #-}
-{-# ghc_options -Wno-orphans            #-}
+{-# options_ghc -Wno-orphans            #-}
 module Unions where
 
 import           Control.Arrow(second)
@@ -1722,6 +1731,7 @@ import           Missing
 {-# language FlexibleInstances     #-}
 {-# language Rank2Types            #-}
 {-# language MultiParamTypeClasses #-}
+{-# language MultiWayIf            #-}
 {-# language NamedFieldPuns        #-}
 {-# language ScopedTypeVariables   #-}
 {-# language StandaloneDeriving    #-}
@@ -1733,7 +1743,7 @@ import           Missing
 {-# language AllowAmbiguousTypes   #-}
 {-# language OverloadedStrings     #-}
 {-# language ViewPatterns          #-}
-{-# ghc_options -Wno-orphans       #-}
+{-# options_ghc -Wno-orphans       #-}
 module Main where
 
 import qualified Data.Set            as Set
@@ -1835,6 +1845,11 @@ instance ArbitraryBeyond UnionType where
                      <*>  arbitraryBeyond
                      <*>  arbitraryBeyond
                      <*>  arbitraryBeyond
+
+instance ArbitraryBeyond          a
+      => ArbitraryBeyond (Counted a) where
+  arbitraryBeyond = Counted <$> LessArbitrary.choose (0, 10000)
+                            <*> arbitraryBeyond
 
 arbitraryBeyondSpec :: forall          ty.
                       (ArbitraryBeyond ty
@@ -2023,6 +2038,7 @@ main  = do
 typesSpec :: (Typeable  ty
              ,Typeable     term
              ,Monoid    ty
+             ,ArbitraryBeyond ty
              ,Arbitrary ty
              ,Arbitrary    term
              ,Show      ty
@@ -2056,6 +2072,7 @@ typesSpec (tyProxy   :: Proxy ty)
 
 typesLaws :: (          ty `Types` term
              ,Arbitrary ty
+             ,ArbitraryBeyond ty
              ,Arbitrary            term
              ,Show      ty
              ,Show                 term
@@ -2447,7 +2464,7 @@ Then we put all the missing code in the module:
 {-# language ViewPatterns               #-}
 {-# language RecordWildCards            #-}
 {-# language OverloadedStrings          #-}
-{-# ghc_options -Wno-orphans            #-}
+{-# options_ghc -Wno-orphans            #-}
 module Missing where
 
 import           Control.Arrow(second)
