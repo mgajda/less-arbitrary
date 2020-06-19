@@ -3,6 +3,7 @@ title:  "Towards a more perfect union type"
 shorttitle: "Perfect union type"
 author:
   - name: Michał J. Gajda
+    orcid:       "0000-0001-7820-3906"
 affiliation:
   institution: "Migamake Pte Ltd"
   email:        mjgajda@migamake.com

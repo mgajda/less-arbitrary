@@ -1,6 +1,12 @@
-\documentclass{svproc}
+\documentclass[runningheads]{llncs}
+
+\usepackage{graphicx}
 
 % to typeset URLs, URIs, and DOIs
+%\usepackage[unicode=true,colorlinks=false,linkcolor=black,hidelinks]{hyperref}
+\usepackage[unicode=true,hidelinks]{hyperref}
+\renewcommand\UrlFont{\color{blue}\rmfamily}
+
 \usepackage{url}
 \def\UrlFont{\rmfamily}
 
@@ -10,8 +16,8 @@
 \usepackage{subcaption} %% For complex figures with subfigures/subcaptions
                         %% http://ctan.org/pkg/subcaption
 \captionsetup{compatibility=false}
-\usepackage[unicode=true,colorlinks=false,linkcolor=black,hidelinks]{hyperref}
-\usepackage{graphicx}
+
+
 \usepackage{color}
 \usepackage{xcolor}
 \usepackage{amsmath}

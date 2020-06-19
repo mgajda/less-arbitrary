@@ -23,7 +23,7 @@ OPTIONS=--mathml				\
 #	--filter pandoc-citeproc		\
 
 #TEMPLATE=acm-template/new-template.tex
-TEMPLATE=springer-template/template.tex
+TEMPLATE=lncs/template.tex
 GNUPLOT=gnuplot
 
 all: out ${PDF} ${HTML} ${TEX} ${TPDF} ${DOCX} debug.out
