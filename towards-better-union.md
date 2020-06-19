@@ -33,10 +33,13 @@ link: "https://gitlab.com/migamake/json-autotype"
 bibliography:
   - towards-better-union.bib
 csl: acm-template/acm-sig-proceedings.csl
-header-includes: |
-  \let\longtable\tabular
-  \let\endlongtable\endtabular
-  \renewcommand{\url}[1]{\href{#1}{[Link]}}
+prologue: |
+  ```{=latex}
+  \usepackage[utf8]{inputenc}
+  \usepackage{newunicodechar}
+  \newunicodechar{∀}{\ensuremath{\forall{}}}
+  %\DeclareUnicodeCharacter{2200}{\ensuremath{\forall{}}}
+  ```
 link-citations: true
 tables: true
 #listings: true
@@ -539,8 +542,14 @@ It should be noted that this approach significantly generalized the assumptions 
 with a full lattice subtyping [@subtype-inequalities;@subtyping-lattice].
 
 Now we are ready to present **relation of typing** and its laws.
+In order to preserve proper English word order, we state that $\mathit{ty}\,{}^\backprime{}\mathit{Types}^\backprime{}\,\mathit{val}$
+instead of classical $\mathit{val}\mathrm{:}\mathit{ty}$.
+Specifying the laws of typing is important, since we may need to consider separately
+the validity of a domain of types/type constraints, and that of the sound typing of the
+terms by these valid types.
 The minimal definition of typing inference relation and type checking relation
-is formulated as consistency between these two operations:
+is formulated as consistency between these two operations.
+
 
 ``` {.haskell #typelike }
 class Typelike ty
@@ -548,14 +557,6 @@ class Typelike ty
    infer ::       val -> ty
    check :: ty -> val -> Bool
 ```
-
-In order to preserve proper English word order, we state $\textrm{val}\ `\textrm{Types}`\ \textrm{ty}$
-instead of classical $\textrm{val}\ :\ \textrm{ty}$.
-Specifying the laws of typing is important, since we may need to consider separately
-the validity of a domain of types/type constraints, and that of the sound typing of the
-terms by these valid types.
-First, we note that to describe *no information*, `mempty` cannot
-correctly type any term.
 
 ``` {#types-spec .haskell .hidden}
 mempty_contains_no_terms
@@ -571,6 +572,8 @@ mempty_contains_no_terms term =
         == False
 ```
 
+First, we note that to describe *no information*, `mempty` cannot
+correctly type any term.
 Second important rule of typing is that all terms are typed successfully by any
 value in the `beyond` set. 
 Finally we state the most intuitive rule for typing: a type inferred from a term, must
@@ -714,6 +717,7 @@ inference must be a contravariant functor with regards to constructors.
 For example, if `AType x y` types `{"a": X, "b": Y}`, then
 `x` must type `X`, and `y` must type `Y`.
 
+## Constraint definition
 
 ### Flat type constraints
 
@@ -824,8 +828,7 @@ instance Typelike StringConstraint where
 ```
 
 
-Free union type
----------------
+### Free union type
 
 Before we endavour on finding type constraints for compound values (arrays and objects),
 it might be instructive to find a notion of _free type_, that is a type with no
@@ -865,8 +868,7 @@ However, the deficiency of this notion of *free type* is that it does not allow
 generalizing in infinite and recursive domains! It only allows utilizing objects from
 the sample.
 
-Presence and absence constraint {#sec:presence-absence-constraints}
--------------------------------
+### Presence and absence constraint {#sec:presence-absence-constraints}
 
 We call the degenerate case of `Typelike` a *presence or absence constraint*.
 It just checks that the type contains at least one observation of the input value,
@@ -1142,7 +1144,7 @@ instance RecordConstraint `Types` Object where
                     (Map.keys  obj)        -- present in type
       && and (Map.elems $ Map.intersectionWith -- values check
                             check fields obj)
-      -- && all isNullable (Map.elems $ fields `Map.difference` obj)
+      && all isNullable (Map.elems $ fields `Map.difference` obj)
          -- absent values are nullable
 ```
 ```{.haskell .hidden #object-constraint}

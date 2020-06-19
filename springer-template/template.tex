@@ -18,9 +18,11 @@
 \usepackage{amssymb}
 
 % Proofreading
+$if(review)$
 \pagestyle{plain}
 \usepackage{lineno}
 \linenumbers
+$endif$
 
 % Diagramming
 \usepackage{tikz-cd}
@@ -28,6 +30,10 @@
 % proof environment
 %\usepackage{proof}
 %\usepackage{semantic}
+
+$if(prologue)$
+$prologue$
+$endif$
 
 % to typeset URLs, URIs, and DOIs
 \usepackage{url}
