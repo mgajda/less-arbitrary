@@ -10,6 +10,11 @@ TEX=out/${NAME}.tex
 DOCX=out/${NAME}.docx
 REFDOCX=acm_submission_template.docx
 PICS=offset-array-example.eps
+
+#TEMPLATE=acm-template/new-template.tex
+TEMPLATE=lncs/template.tex
+CSL=lncs/springer-lecture-notes-in-computer-science.csl
+GNUPLOT=gnuplot
 OPTIONS=--mathml				\
 	--filter pandoc-crossref		\
  	--filter pandoc-citeproc		\
@@ -17,14 +22,11 @@ OPTIONS=--mathml				\
 	--highlight-style=haddock		\
 	--from=markdown+tex_math_dollars+yaml_metadata_block+footnotes+yaml_metadata_block \
 	--columns 40 \
-	--csl acm-template/acm-sig-proceedings.csl \
-	--filter pandoc-filter-graphviz		
-#	--listings \
-#	--filter pandoc-citeproc		\
+	--csl ${CSL} \
+	--filter pandoc-filter-graphviz
 
-#TEMPLATE=acm-template/new-template.tex
-TEMPLATE=lncs/template.tex
-GNUPLOT=gnuplot
+#	--listings \
+#	--filter pandoc-citeproc		
 
 all: out ${PDF} ${HTML} ${TEX} ${TPDF} ${DOCX} debug.out
 
@@ -52,7 +54,6 @@ ${TEX}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${BIBLIO}
 	pandoc ${OPTIONS} \
 		--template=${TEMPLATE}			\
 		--pdf-engine=xelatex                    \
-		--csl=templates/acm-sig-proceedings.csl	\
 		--standalone \
 		-o ${TEX} ${SRC}
 
@@ -65,7 +66,6 @@ ${PDF}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${BIBLIO}
 	pandoc ${OPTIONS} \
 		--template=${TEMPLATE}		\
 		--pdf-engine=xelatex		\
-	        --csl=templates/acm-sig-proceedings.csl	\
 		-o ${PDF} ${SRC}
 
 #${LHS}: ${IMG_PLOTS} ${SRC} ${TEMPLATE} ${BIBLIO}
