@@ -1,9 +1,9 @@
 #!/bin/bash
 
-NAME=haskell-sympo-2020-A
+NAME=haskell_sympo_2020
 
 buildIt() {
-  pandoc ${NAME}.md -o ${NAME}.pdf
+  pandoc --from markdown+yaml_metadata_block ${NAME}.md -o ${NAME}.pdf
 }
 
 buildIt
