@@ -8,7 +8,7 @@ affiliation:
   institution: "Migamake Pte Ltd"
   email:        mjgajda@migamake.com
   url:         "https://migamake.com"
-review: true
+#review: true
 tags:
   - Haskell
   - JSON
@@ -409,8 +409,8 @@ As we focus on JSON, we utilize Haskell encoding of the JSON term
 for convenient reading(from Aeson package [@aeson]); specified as follows:
 
 ``` {.haskell file=refs/Data/Aeson.hs}
-data Value = Object (Map String Value) | Array [Value]
-           | String Text | Number Scientific | Bool Bool | Null
+data Value = Object (Map String Value) | Array [Value] | Null
+           | Number Scientific         | String Text   | Bool Bool
 ```
 ``` {.haskell file=refs/Data/Scientific.hs .hidden}
 -- To incorporate both integers and exact decimal fractions[^6] in
@@ -459,7 +459,7 @@ of _monotonically gathering information_
 
 
 However, since we defined **generalization** operator `<>` as
-**information fusion** (or **unification** in categorically dual case of a strict type systems.), we may encounter difficulties in assuring that no
+**information fusion** (corresponding to unification in categorically dual case of a strict type systems.), we may encounter difficulties in assuring that no
 information has been lost during the generalization^[Examples will be provided later.].
 Moreover, strict type systems usually specify more than one error value,
 as it should contain information about error messages and to keep track
@@ -716,7 +716,7 @@ Indeed we want to apply this theory to infer a type definition from a
 finite set of examples. We also seek to generalize it to infinite
 types.
 For this purpose, we set the rules of type design as short description as possible,
-inference must be a contravariant functor with regards to constructors.
+inference must be a **contravariant** functor with regards to constructors.
 For example, if `AType x y` types `{"a": X, "b": Y}`, then
 `x` must type `X`, and `y` must type `Y`.
 
@@ -1923,8 +1923,19 @@ instance LessArbitrary NumberConstraint where
 instance Arbitrary     NumberConstraint where
   arbitrary = fasterArbitrary
 
+listUpToTen :: CostGen [a]
+listUpToTen  = do
+  len <- LessArbitrary.choose (0,10)
+  replicateM len lessArbitrary
+
 instance LessArbitrary StringConstraint where
-  lessArbitrary = genericLessArbitraryMonoid
+  lessArbitrary = LessArbitrary.oneOf             simple
+           <$$$?> LessArbitrary.oneOf (complex <> simple)
+    where
+      simple  =  pure <$> [SCDate, SCEmail, SCNever, SCAny]
+      complex = [SCEnum . Set.fromList <$> listUpToTen]
+             <>  simple
+
 instance Arbitrary     StringConstraint where
   arbitrary = fasterArbitrary
 
@@ -2009,6 +2020,8 @@ main  = do
   sample $ arbitrary @MappingConstraint
   sample $ arbitrary @ObjectConstraint
   -}
+  let s = SCEnum $ fromList $ [""] <> [show i | i <- [0..8]]
+  assert $ s == s <> s
 
   lawsCheckMany 
     [typesSpec (Proxy :: Proxy (FreeType Value) )
