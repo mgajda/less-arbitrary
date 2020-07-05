@@ -1114,7 +1114,8 @@ data RecordConstraint =
 instance Semigroup   RecordConstraint where
   RecordConstraint     a  <>
     RecordConstraint     b = RecordConstraint $
-    Map.unionWith (<>) a b
+         Map.intersectionWith (<>) a b
+      <> (makeNullable <$> mapXor  a b)
 ```
 
 ``` {#object-constraint .haskell .hidden}
@@ -1122,6 +1123,15 @@ instance Semigroup   RecordConstraint where
   a        <> RCBottom = a
   RCTop    <> _        = RCTop
   _        <> RCTop    = RCTop
+
+makeNullable :: UnionType -> UnionType
+makeNullable u = u { unionNull = Present }
+
+-- | To be added to Data.HashMap
+mapXor    :: (Eq k, Hashable k)
+          => HashMap k v -> HashMap k v -> HashMap k v
+mapXor a b = (a `Map.difference` b)
+          <> (b `Map.difference` a)
 
 instance Typelike RecordConstraint where
   beyond = (==RCTop)
@@ -2020,12 +2030,13 @@ scEnumExample = label "SCEnum" $ s == s <> s
 
 -- | Bug in treatment of missing keys
 objectExample = do
+    print t
     quickCheck $ label "non-empty object" $ t `check` ob2
     quickCheck $ label "empty object"     $ t `check` ob
   where
     ob  :: Object = Map.fromList []
     ob2 :: Object = Map.fromList [("a", String "b")]
-    t   :: ObjectConstraint = infer ob2 <> infer ob
+    t   :: RecordConstraint = infer ob2 <> infer ob
 
 -- | Checking for problems with set.
 freetypeExample = label "freetype" $ a <> b == b <> a
