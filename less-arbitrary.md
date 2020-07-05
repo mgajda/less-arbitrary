@@ -849,6 +849,8 @@ module Test.Arbitrary(
 import Data.Proxy
 import Test.QuickCheck
 import Test.QuickCheck.Classes
+import qualified Data.HashMap.Strict as Map
+import           Data.HashMap.Strict(HashMap)
 
 <<arbitrary-laws>>
 ```
