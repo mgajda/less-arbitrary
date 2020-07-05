@@ -2027,8 +2027,7 @@ objectExample = do
     ob2 :: Object = Map.fromList [("a", String "b")]
     t   :: ObjectConstraint = infer ob2 <> infer ob
 
--- | Problem with hash:
---   hash (Number (5.0e-6)) == hash (Number (-1.1e11))
+-- | Checking for problems with set.
 freetypeExample = label "freetype" $ a <> b == b <> a
   where
     a = FreeType {captured = Set.fromList [Bool False,Bool True,Number (-3000.0),Number 0.6,Number (-1.1e11),Number (-9.0e7),Null]}
