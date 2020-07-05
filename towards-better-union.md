@@ -813,7 +813,7 @@ instance Semigroup StringConstraint where
   _          <>  SCAny                            = SCAny
   SCDate     <>  SCDate                           = SCDate
   SCEmail    <>  SCEmail                          = SCEmail
-  (SCEnum a) <> (SCEnum b) | length (a `Set.union` b) < 10 = SCEnum (a <> b)
+  (SCEnum a) <> (SCEnum b) | length (a `Set.union` b) <= 10 = SCEnum (a <> b)
   _          <>  _                                = SCAny
 ```
 
@@ -1040,7 +1040,7 @@ representing it either as a `Map`, or a record.
 The typing of `Map` would be specified as follows, with the optionality cost
 being a sum of optionalities in its fields.
 
-``` {.haskell}
+``` {.haskell }
 data MappingConstraint = MappingNever -- mempty
    | MappingConstraint { keyConstraint   :: StringConstraint
                        , valueConstraint :: UnionType        }
@@ -1752,17 +1752,20 @@ module Main where
 import qualified Data.Set            as Set
 import qualified Data.Text           as Text
 import qualified Data.ByteString.Char8 as BS
-import Control.Monad(when)
-import Data.FileEmbed
-import Data.Maybe
-import Data.Scientific
-import Data.Aeson
-import Data.Proxy
-import Data.Typeable
-import Test.Hspec
-import Test.Hspec.QuickCheck
-import Test.QuickCheck
-import Test.Validity.Shrinking.Property
+import           Control.Monad(when, replicateM)
+import           Control.Exception(assert)
+import           Data.FileEmbed
+import           Data.Maybe
+import           Data.Scientific
+import           Data.Aeson
+import           Data.Proxy
+import           Data.Typeable
+import qualified Data.HashMap.Strict as Map
+import           Data.HashMap.Strict(HashMap)
+import           Test.Hspec
+import           Test.Hspec.QuickCheck
+import           Test.QuickCheck
+import           Test.Validity.Shrinking.Property
 import           Test.Validity.Utils(nameOf)
 import qualified GHC.Generics as Generic
 import           Test.QuickCheck.Classes
@@ -1923,14 +1926,15 @@ instance LessArbitrary NumberConstraint where
 instance Arbitrary     NumberConstraint where
   arbitrary = fasterArbitrary
 
-listUpToTen :: CostGen [a]
+listUpToTen :: LessArbitrary a
+            => CostGen      [a]
 listUpToTen  = do
   len <- LessArbitrary.choose (0,10)
   replicateM len lessArbitrary
 
 instance LessArbitrary StringConstraint where
-  lessArbitrary = LessArbitrary.oneOf             simple
-           <$$$?> LessArbitrary.oneOf (complex <> simple)
+  lessArbitrary = LessArbitrary.oneof             simple
+             $$$? LessArbitrary.oneof (complex <> simple)
     where
       simple  =  pure <$> [SCDate, SCEmail, SCNever, SCAny]
       complex = [SCEnum . Set.fromList <$> listUpToTen]
@@ -2008,6 +2012,29 @@ allSpec = describe (nameOf @ty) $ do
 <<types-spec>>
 <<typecost-laws>>
 
+-- * Unit tests for faster checking
+-- | Bug in generation of SCEnum
+scEnumExample = label "SCEnum" $ s == s <> s
+  where
+    s = SCEnum $ Set.fromList $ [""] <> [Text.pack $ show i | i <- [0..8]]
+
+-- | Bug in treatment of missing keys
+objectExample = do
+    quickCheck $ label "non-empty object" $ t `check` ob2
+    quickCheck $ label "empty object"     $ t `check` ob
+  where
+    ob  :: Object = Map.fromList []
+    ob2 :: Object = Map.fromList [("a", String "b")]
+    t   :: ObjectConstraint = infer ob2 <> infer ob
+
+-- | Problem with hash:
+--   hash (Number (5.0e-6)) == hash (Number (-1.1e11))
+freetypeExample = label "freetype" $ a <> b == b <> a
+  where
+    a = FreeType {captured = Set.fromList [Bool False,Bool True,Number (-3000.0),Number 0.6,Number (-1.1e11),Number (-9.0e7),Null]}
+    b = FreeType {captured = Set.fromList [Bool False,Bool True,Number  5.0e-6,Null,String "?",Number 1.1e9,Number 3.0e10]}
+
+-- * Run all tests
 main :: IO ()
 main  = do
   {-
@@ -2020,8 +2047,9 @@ main  = do
   sample $ arbitrary @MappingConstraint
   sample $ arbitrary @ObjectConstraint
   -}
-  let s = SCEnum $ fromList $ [""] <> [show i | i <- [0..8]]
-  assert $ s == s <> s
+  quickCheck scEnumExample
+  objectExample
+  quickCheck freetypeExample
 
   lawsCheckMany 
     [typesSpec (Proxy :: Proxy (FreeType Value) )
@@ -2425,8 +2453,7 @@ In order to represent `FreeType` for the `Value`,
 we need to add `Ord` instance for it:
 
 ```{.haskell #missing}
-instance Ord       Value where
-  compare = compare `on` hash
+deriving instance Ord Value
 ```
 
 For validation of dates and emails, we import functions from Hackage:
@@ -2475,6 +2502,7 @@ Then we put all the missing code in the module:
 {-# language NamedFieldPuns             #-}
 {-# language PartialTypeSignatures      #-}
 {-# language ScopedTypeVariables        #-}
+{-# language StandaloneDeriving         #-}
 {-# language TypeOperators              #-}
 {-# language RoleAnnotations            #-}
 {-# language ViewPatterns               #-}
