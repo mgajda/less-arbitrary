@@ -16,20 +16,18 @@ tags:
   - type providers
 abstract: |
   We present a principled theoretical
-  framework for dealing with union types,
+  framework for inferring and checking the union types,
   and show its work in practice
   on JSON data structures.
 
-  The framework poses a union type
-  inference as a learning problem
+  The framework poses a union type inference as a learning problem
   from multiple examples.
-  The categorical framework is
-  generic, and easily extensible.
+  The categorical framework is generic and easily extensible.
 date:   2020-06-19
 description: |
   Proposes a new framework for union types
   that uses monoid and complete functions,
-  and enjoys easier theoretical treatment
+  and more accessible theoretical treatment
   than ad-hoc typing relations.
 link: "https://gitlab.com/migamake/json-autotype"
 bibliography:
@@ -48,8 +46,8 @@ tables: true
 acks: |
   The author thanks for all tap-on-the-back donations to his past projects.
 
-  The text was prepared with great help of bidirectional literate programming[@literate-programming] tool[@entangled],
-  Pandoc[@pandoc] markdown publishing system and live feedback from GHCid[@ghcid].
+  We wrote the article with the great help of bidirectional literate programming [@literate-programming] tool [@entangled],
+  Pandoc [@pandoc] markdown publishing system and live feedback from GHCid [@ghcid].
 ---
 
 Introduction
@@ -60,15 +58,13 @@ Typing dynamic languages has been long considered a challenge
 the ubiquity cloud application programming
 interfaces (APIs) utilizing JavaScript object notation (JSON),
 where one needs to infer the structure having only a limited number of sample documents available.
-Previous research have suggested it is possible to infer adequate type mappings
+Previous research has suggested it is possible to infer adequate type mappings
 from sample data
-[@json-autotype-prezi; @quicktype; @type-providers-f-sharp].
+[@json-autotype-prezi; @quicktype; @type-providers-f-sharp; @pads].
 
-In the present study, we expand on these results. We propose a framework for type systems
-in programming languages as learning algorithms, formulate it mathematically, and evaluate its
-performance on JSON API examples.
-The proposed framework is grounded on mathematical theory, and complete typing relation.
-It is intended to add new features easily.
+In the present study, we expand on these results. We propose a modular framework for type systems
+in programming languages as learning algorithms, formulate it as equational identities, and evaluate its
+performance on inference of Haskell data types from JSON API examples.
 
 Related work
 ------------
@@ -76,21 +72,18 @@ Related work
 ### Union type providers
 
 The earliest practical effort to apply union types to JSON inference to
-generate Haskell types[@json-autotype-prezi].
+generate Haskell types [@json-autotype-prezi].
 It uses union type theory, but it also lacks an extensible theoretical framework.
 F\# type providers for JSON facilitate deriving a schema
-automatically; however, a type system is *ad-hoc*[@type-providers-f-sharp].
-The other attempt to automatically infer schemas has been introduced in the PADS project
-[@pads]. Nevertheless, it has not specified a generalized type-system design methodology.
-One approach uses Markov chains to derive JSON types [@quicktype].
-This approach requires considerable engineering time due to the implementation
+automatically; however, a type system does not support union of alternatives and is given shape inference algorithm, instead of design driven by desired properties [@type-providers-f-sharp].
+The other attempt to automatically infer schemas has been introduced in the PADS project [@pads,@learnpads]. Nevertheless, it has not specified a generalized type-system design methodology.
+One approach uses Markov chains to derive JSON types [@quicktype]^[This approach uses Markov chains to infer best of alternative type representations, which to our knowledge has not been exhaustively tackled by formal approaches.].
+This approach requires considerable engineering time due to the implementation of
 unit tests in a case-by-case mode, instead of formulating laws applying to all types.
 Moreover, this approach lacks a sound underlying theory.
-Regular expression types were also used to type XML documents[@xduce], which does not allow
+Regular expression types were also used to type XML documents [@xduce], which does not allow
 for selecting alternative representation.
-Therefore, we summarize that there are several previously introduced approaches that provide partially
-satisfactory results. In the present study, we aim to expand these proposals to enable systematic
-addition of features, and automatic validation of types.
+In the present study, we generalize previously introduced approaches and enable a systematic addition of not only value sets, but inference subalgorithms, to the union type system.
 
 
 ### Frameworks for describing type systems
@@ -104,42 +97,38 @@ It is also worth noting that traditional Damas-Milner type disciplines enjoy dec
 and embrace the laws of soundness, and subject-reduction.
 However these laws often prove too strict during type system extension,
 dependent type systems often abandon subject-reduction,
-and practical programming language type systems are either undecidable[@GHCZurihac],
-or even sometimes even unsound[@typescript-soundness].
+and type systems of widely used programming languages are either undecidable [@GHCZurihac],
+or even unsound [@typescript-soundness].
 
-Early approach approach used lattice structure on the types [@subtyping-lattice],
-which is more stringent that ours, since it requires idempotence
-of unification (as join operation), as well as complementary meet operation
-with the same properties.
+Early approaches used lattice structure on the types [@subtyping-lattice],
+which is more stringent than ours since it requires idempotence
+of unification (as join operation), as well as complementary meet operation with the same properties.
 Semantic subtyping approach provides a characterization
-of set-based union, intersection, and complement types[@semantic-subtyping; @semantic-subtyping2],
-which allows model subtype containment on first order types and functions.
-This model relies on building a model using infinite sets in a set theory,
-and thus is not immediately apparent as implementable^[Since we are interested in engineering the type system further, a simple implementation serves as ultimate evidence of extensibility.].
+of a set-based union, intersection, and complement types [@semantic-subtyping; @semantic-subtyping2],
+which allows model subtype containment on first-order types and functions.
+This model relies on building a model using infinite sets in set theory, but its rigidity fails to generalize to non-idempotent learning^[Which would allow extension with machine learning techniques like Markov chains to infer optimal type representation from frequency of occuring values[@quicktype].].
 We are also not aware of a type inference framework that consistently
-and completely preserve information in face of inconsistencies nor errors,
-beyond using `bottom` and expanding to *infamous undefined
-behaviour*[@undefined1,@undefined2,@undefined3].
+and completely preserve information in the face of inconsistencies nor errors, beyond using `bottom` and expanding to *infamous undefined
+behaviour* [@undefined1,@undefined2,@undefined3].
 
-We propose a categorical and constructive framework that preserves the soundness in inference,
-while making compromises are allowed by consistent approximations.
+We propose a categorical and constructive framework that preserves the soundness in inference
+while allowing for consistent approximations.
 Indeed our experience is that most of the type system implementation
 may be generic. 
 
 # Motivation {#sec:examples}
 
-Here, we consider several examples paraphrased from JSON API descriptions.
+Here, we consider several examples similar to JSON API descriptions.
 We provide these examples in the form of a few JSON objects,
 along with desired representation as Haskell data declaration.
 
 1.  Subsets of data within a single constructor:
 
     a.   *API argument is an email* -- it is a subset of valid `String`
-        values, that can be validated on the client side.
+        values that can be validated on the client-side.
     b.   *The page size determines the number of results to return (min: 10,
-            max:10,000)* -- it is also a subset of integer values (`Int`) between $10$,
-            and $10,000$
-    c. _The `date` field contains ISO8601 date_ -- a record field is represented
+            max:10,000)* -- it is also a subset of integer values (`Int`) between $10$, and $10,000$
+    c. _The `date` field contains ISO8601 date_ -- a record field represented
             as a `String` that contains a calendar date in the format
             `"2019-03-03"`
 
@@ -221,8 +210,8 @@ example1c_values = String <$> [
 example1c_repr = HRef "Date"
 ```
 2.  Optional fields: *The page size is equal to 100 by default* --
-    it means we have a record `{"page_size": 50}`
-    or an empty record that should be interpreted as default value `{}`
+    it means we expect to see the record like `{"page_size": 50}`
+    or an empty record `{}` that should be interpreted in the same way as `{"page_size": 100}`
 
 ``` {.json file=test/example2.json .hidden}
 {}
@@ -262,8 +251,8 @@ example3_values = [
 example3_repr =
   HApp ":|:" [HRef "String", HRef "Int"]
 ```
-4.  Variant records: *Answer contains either a text message with an user id, or an error.* --
-    That is can be represented as one of following options:
+4.  Variant records: *Answer contains either a text message with a user identifier or an error.* --
+    That can be represented as one of following options:
 
 ``` {.json file=test/example4.json}
 {"message" : "Where can I submit my proposal?", "uid" : 1014}
@@ -319,18 +308,12 @@ example5_repr = HADT [
 6.  Maps of identical objects (example from [@quicktype]):
 
 ``` {.json file=test/example6.json}
-{   "6408f5": { "size":       969709
-              , "height":     510599
-              , "difficulty": 866429.732
-              , "previous":   "54fced"   },
-    "54fced": { "size":       991394
-              , "height":     510598
-              , "difficulty": 866429.823
-              , "previous":   "6c9589"   },
-    "6c9589": { "size":       990527
-              , "height":     510597
-              , "difficulty": 866429.931
-              , "previous":   "51a0cb"   } }
+{   "6408f5": { "size":       969709    , "height":    510599
+              , "difficulty": 866429.732, "previous": "54fced" },
+    "54fced": { "size":       991394    , "height":    510598
+              , "difficulty": 866429.823, "previous": "6c9589" },
+    "6c9589": { "size":       990527    , "height":    510597
+              , "difficulty": 866429.931, "previous": "51a0cb" } }
 ```
 
 ```{.haskell #representation-examples .hidden }
@@ -350,7 +333,7 @@ example6_repr = HApp
 
 It should be noted that the last example presented above requires
 Haskell representation inference to be non-monotonic,
-as a dictionary with a single key would have an incompatible type:
+as an example of object with only a single key would be best represented by a record type:
 
 ``` {.haskell file=test/example6-single-key.result}
 data Example = Example { f_6408f5 :: O_6408f5, f_54fced :: O_6408f5
@@ -359,18 +342,18 @@ data O_6408f5 = O_6408f5 { size, height :: Int, difficulty :: Double
                          , previous     :: String }
 ```
 
-It also suggests that a user might decide to explicitly add evidence for
-one of alternative representations in the case when samples are insufficient.
-(like in case of a single element dictionary.)
+However, when this object has multiple keys with values of the same structure,
+the best representation is that of a mapping shown below.
+This is also an example of when user may decide to explicitly add evidence for
+one of the alternative representations in the case when input samples are insufficient.
+(like when input samples only contain a single element dictionary.)
 
 ::: { #sec:nonmonotonic-inference }
 
 ```{.haskell file=test/example6-multi-key.result}
 data ExampleMap = ExampleMap (Map Hex ExampleElt)
-data ExampleElt = ExampleElt { size       :: Int
-                             , height     :: Int
-                             , difficulty :: Double
-                             , previous   :: String }
+data ExampleElt = ExampleElt { size :: Int, height :: Int
+   , difficulty :: Double, previous :: String }
 ```
 
 :::
@@ -389,15 +372,13 @@ Accordingly, we can assume that the smallest non-singleton set is a better
 approximation type than a singleton set. We call it *minimal containing set
 principle*.
 
-Second we can prefer types that allow for a fewer number of *degrees of freedom*
+Second, we can prefer types that allow for a fewer number of *degrees of freedom*
 compared with the others, while conforming to a commonly occurring structure. We
 denote it as an *information content principle*.
 
 Given these principles, and examples of frequently occurring
-patterns, we can infer a reasonable *world of types* that can be used as
-approximations, instead of establishing this procedure in an ad-hoc
-manner. In this way,we can implement *type
-system engineering*, that allows deriving type system design
+patterns, we can infer a reasonable *world of types* that approximate sets of possible values. In this way, we can implement *type
+system engineering* that allows deriving type system design
 directly from the information about data structures
 and the likelihood of their
 occurrence.
@@ -428,10 +409,10 @@ If an inference fails, it is always possible to correct it by introducing
 an additional observation (example).
 To denote unification operation, or **information fusion** between two type descriptions,
 we use a `Semigroup` interface operation `<>` to merge types inferred
-from different observations. If `Typelike` is semilattice, then `<>` is meet operation (least upper bound).
+from different observations. If the semigroup is a semilattice, then `<>` is meet operation (least upper bound).
 Note that this approach is dual to traditional unification that _narrows down_ solutions
 and thus is join operation (greatest lower bound).
-We use neutral element of the `Monoid` to indicate
+We use a neutral element of the `Monoid` to indicate
 a type corresponding to no observations.
 
 ``` {.haskell file=refs/Data/Semigroup.hs}
@@ -439,54 +420,50 @@ class Semigroup ty              where (<>)   :: ty -> ty -> ty
 class Semigroup ty => Monoid ty where mempty :: ty
 ```
 
-In other words, we can say that `mempty` (or `bottom`) of the corresponds to situation wher **no information was accepted** about a possible
-value (no term seen, not even a null). It is neutral element of `Typelike`.
-For example, an empty array `[]`
-can be referred to as an array type with `mempty` as an element type.
+In other words, we can say that `mempty` (or `bottom`) element corresponds to situation where **no information was accepted** about a possible
+value (no term was seen, not even a null). It is a neutral element of `Typelike`.
+For example, an empty array `[]` can be referred to as an array type with `mempty` as an element type.
 This represents the view that `<>` always **gathers more information** about the type,
 as opposed to the traditional unification that always **narrows down** possible solutions.
-We describe the laws as QuickCheck [@quickcheck] properties so that
-unit testing can be implemented to detect obvious violations.
+We describe the laws described below as QuickCheck [@quickcheck] properties so that
+unit testing can be implemented to detect apparent violations.
 
 ### Beyond set
 
 In the domain of permissive union types, a `beyond` set represents
-the case of **everything permitted** or a fully dynamic value, when we gather
-the information that permits every possible value inside a type. At the first
+the case of **everything permitted** or a fully dynamic value when we gather the information that permits every possible value inside a type. At the first
 reading, it may be deemed that a `beyond` set should comprise of
-only one single element -- the `top` one (arriving at complete bounded semilattice), but this is to narrow for our purpose
+only one single element -- the `top` one (arriving at complete bounded semilattice), but this is too narrow for our purpose
 of _monotonically gathering information_
 
 
 However, since we defined **generalization** operator `<>` as
-**information fusion** (corresponding to unification in categorically dual case of a strict type systems.), we may encounter difficulties in assuring that no
-information has been lost during the generalization^[Examples will be provided later.].
+**information fusion** (corresponding to unification in categorically dual case of strict type systems.), we may encounter difficulties in assuring that no information has been lost during the generalization^[Examples will be provided later.].
 Moreover, strict type systems usually specify more than one error value,
-as it should contain information about error messages and to keep track
+as it should contain information about error messages and keep track
 from where an error has been originated[^7].
 
 This observation lets us go well beyond typing statement of gradual type inference
-as discovery problem from partial information[@gradual-typing].
-Here we consider type inference as a **learning problem**,
-and allows finding the common ground between the dynamic and the static typing
+as a discovery problem from incomplete information [@gradual-typing].
+Here we consider type inference as a **learning problem**
+furthermore, find common ground between the dynamic and the static typing
 discipline. The languages relying on the static type discipline usually consider `beyond` as a set of
 error messages, as a value should correspond to a statically assigned and
-a **narrow** type. In this setting `mempty` would be fully polymorphic type $\forall{}a. a$.
+a **narrow** type. In this setting, `mempty` would be fully polymorphic type $\forall{}a. a$.
 
 Languages with dynamic type discipline will treat `beyond` as untyped,
-dynamic value, and `mempty` again is a fully unknown, polymorphic value (like a type of an element of an empty array)[^8].
+dynamic value and `mempty` again is an entirely unknown, polymorphic value (like a type of an element of an empty array)[^8].
 
 ```{.haskell #typelike }
 class (Monoid t, Eq t, Show t) => Typelike t where beyond :: t -> Bool
 ```
 
-In addition, the standard laws for a **commutative** `Monoid`, we state
+Besides, the standard laws for a **commutative** `Monoid`, we state
 the new law for the `beyond` set: The `beyond` set is always **closed to information
-addition** by `(<>a)` or `(a<>)` for any value of `a`. 
-In other words the `beyond` set is an attractor of `<>` on both sides [^10].
-However we do not require _idempotence_ of `<>`, which is uniformly present
-in union type frameworks based on lattice[@subtyping-lattice]
-and set-based approaches^[Which use Heyting algebras, which have more assumptions that the lattice approaches.][@semantic-subtyping].
+addition** by `(<>a)` or `(a<>)` for any value of `a`, or **submonoid**. 
+In other words, the `beyond` set is an attractor of `<>` on both sides [^10].
+However, we do not require _idempotence_ of `<>`, which is uniformly present
+in union type frameworks based on the lattice [@subtyping-lattice] and set-based approaches^[Which use Heyting algebras, which have more assumptions that the lattice approaches.][@semantic-subtyping].
 Concerning union types, the key property of the `beyond` set, is that it is closed to
 information acquisition:
 
@@ -515,36 +492,32 @@ typelikeLaws (Proxy :: Proxy a) =
 ```
 
 In this way, we can specify other elements of `beyond` set instead of a single `top`.
-When under strict type discipline, like that of Haskell[@GHCZurihac], we seek to enable each element of the `beyond` set
-to contain at least one error message.[^9]
+When under strict type discipline, like that of Haskell [@GHCZurihac], we seek to enable each element of the `beyond` set
+to contain at least one error message[^9].
 
 We abolish the semilattice requirement
-that has been conventionally assumed for type constraints
-[@subtype-inequalities], as this requirement is valid only for strict type
-constraint inference, not for a more general type inference considered
-as a learning problem. As we observe in the example 5
-in [@sec:examples], we need to perform non-monotonic step of choosing alternative representation
+that has been conventionally assumed for type constraints [@subtype-inequalities], as this requirement is valid only for the strict type constraint inference, not for a more general type inference considered
+as a learning problem. As we observe in example 5
+in [@sec:examples], we need to perform a non-monotonic step of choosing alternative representation
 after monotonic steps of merging all the information.
 
-When a specific instance of `Typelike` is also a semilattice (an idempotent semigroup),
-we will explicitly indicate if that is the case.
+When a specific instance of `Typelike` is not a semilattice (an idempotent semigroup), we will explicitly indicate that is the case.
 It is convenient validation when testing a recursive structure of the
 type.
 Note that we abolish semilattice requirement that was traditionally
-assumed for type constraints here[@subtyping-lattice].
+assumed for type constraints here [@subtyping-lattice].
 That is because this requirement is valid only for strict type
 constraint inference, not for a more general type inference as a
 learning problem. As we saw on `ExampleMap`
 in [@sec:examples], we need non-monotonic
 inference when dealing with alternative representations.
-It should be noted that this approach significantly generalized the assumptions compared
+We note that this approach significantly generalized the assumptions compared
 with a full lattice subtyping [@subtype-inequalities;@subtyping-lattice].
 
-Now we are ready to present **relation of typing** and its laws.
+Time to present the **relation of typing** and its laws.
 In order to preserve proper English word order, we state that $\mathit{ty}\,{}^\backprime{}\mathit{Types}^\backprime{}\,\mathit{val}$
 instead of classical $\mathit{val}\mathrm{:}\mathit{ty}$.
-Specifying the laws of typing is important, since we may need to consider separately
-the validity of a domain of types/type constraints, and that of the sound typing of the
+Specifying the laws of typing is important, since we may need to separately consider the validity of a domain of types/type constraints, and that of the sound typing of the
 terms by these valid types.
 The minimal definition of typing inference relation and type checking relation
 is formulated as consistency between these two operations.
@@ -572,11 +545,11 @@ mempty_contains_no_terms term =
 
 First, we note that to describe *no information*, `mempty` cannot
 correctly type any term.
-Second important rule of typing is that all terms are typed successfully by any
+A second important rule of typing is that all terms are typed successfully by any
 value in the `beyond` set. 
-Finally we state the most intuitive rule for typing: a type inferred from a term, must
+Finally, we state the most intuitive rule for typing: a type inferred from a term, must
 always be valid for that particular term.
-The law asserts that the following diagram commutes:
+The law asserts that the diagram on the figure commutes:
 
 ``` {#types-spec .haskell .hidden}
 beyond_contains_all_terms :: forall ty    term.
@@ -591,7 +564,7 @@ beyond_contains_all_terms ty   term = do
 ```
 
 ``` {#types-spec .haskell .hidden}
--- However, randomly drawing types for particular instances we might almost never get a type from the `beyond` set.
+-- However, randomly drawing types for particular instances we might seldom get a type from the `beyond` set.
 -- In this case, we can use special generator called `arbitraryBeyond` that generates only the elements of the `beyond`
 -- set:
 beyond_contains_all_terms2 :: forall          ty term.
@@ -680,15 +653,13 @@ fusion_keeps_terms v ty1 ty2 = do
      | otherwise   -> label "no type checks value"     $ True `shouldBe` True
 ```
 
-The last law states that the terms are correctly typechecked
+The last law states that the terms are correctly type-checked
 after adding more information into a single type.
 (For inference relation, it would be described as _principal type property_.)
-The minimal `Typelike` instance is the one that contains only `mempty`
-corresponding to the case of *no sample data received*, and a single `beyond` element for *all values permitted*.
+The minimal `Typelike` instance is the one that contains only `mempty` corresponding to the case of *no sample data received*, and a single `beyond` element for *all values permitted*.
 We will define it below as `PresenceConstraint` in [@sec:presence-absence-constraints].
-It should be noted that these laws are still compatible with the strict, static type
-discipline: namely the `beyond` set corresponds to a set of constraints with at least one
-type error, and a task
+These laws are also compatible with the strict, static type
+discipline: namely, the `beyond` set corresponds to a set of constraints with at least one type error, and a task
 of a compiler to prevent any program with the terms that type only to
 the `beyond` as a least upper bound.
 
@@ -696,17 +667,14 @@ Type engineering principles
 ---------------------------
 
 Considering that we aim to infer a type from a finite number of samples,
-we are presented with a *learning problem*, so we need to use *prior*
+we encounter a *learning problem*, so we need to use *prior*
 knowledge about the domain for inferring types.
 Observing that  $a: \text{false}$ we can expect that in particular cases,
 we may obtain that $a : \text{true}$.
 After noting that $b: 123$, we expect that $b: 100$ would also be
-acceptable. It means that we need to consider a typing system to *learn a reasonable
-general class from few instances*. This motivates formulating the type system 
-as an inference problem.
+acceptable. It means that we need to consider a typing system to *learn a reasonable general class from few instances*. This observation motivates formulating the type system as an inference problem.
 As the purpose is to deliver the most descriptive[^11] types, we assume
-that we need to obtain a wider view rather than focusing on a *free type*
-and applying it to larger sets whenever it is deemed justified.
+that we need to obtain a broader view rather than focusing on a *free type* and applying it to larger sets whenever it is deemed justified.
 
 The other principle corresponds to **correct operation**. It implies
 that having operations regarded on types,
@@ -715,8 +683,7 @@ operation in the case of unexpected errors.
 Indeed we want to apply this theory to infer a type definition from a
 finite set of examples. We also seek to generalize it to infinite
 types.
-For this purpose, we set the rules of type design as short description as possible,
-inference must be a **contravariant** functor with regards to constructors.
+We endeavour rules to be as short as possible. The inference must also be a **contravariant** functor with regards to constructors.
 For example, if `AType x y` types `{"a": X, "b": Y}`, then
 `x` must type `X`, and `y` must type `Y`.
 
@@ -787,7 +754,8 @@ instance Monoid NumberConstraint where
 
 ``` {#basic-constraints .haskell}
 data StringConstraint = SCDate               | SCEmail
-  | SCEnum (Set Text) | SCNever {- mempty -} | SCAny {- beyond -}
+  | SCEnum (Set Text) {- non-empty set of observed values -}
+  | SCNever {- mempty -} | SCAny {- beyond -}
 ```
 ``` {#basic-constraints .haskell .hidden}
   deriving(Eq, Show,Generic)
@@ -808,9 +776,7 @@ instance StringConstraint `Types` Text where
 
 instance Semigroup StringConstraint where
   SCNever    <>  a                                = a
-  a          <>  SCNever                          = a
   SCAny      <>  _                                = SCAny
-  _          <>  SCAny                            = SCAny
   SCDate     <>  SCDate                           = SCDate
   SCEmail    <>  SCEmail                          = SCEmail
   (SCEnum a) <> (SCEnum b) | length (a `Set.union` b) <= 10 = SCEnum (a <> b)
@@ -818,6 +784,9 @@ instance Semigroup StringConstraint where
 ```
 
 ``` {#basic-constraints .haskell .hidden}
+  a          <>  SCNever                          = a
+  _          <>  SCAny                            = SCAny
+  
 instance Monoid StringConstraint where
   mempty  = SCNever
 
@@ -828,7 +797,7 @@ instance Typelike StringConstraint where
 
 ### Free union type
 
-Before we endavour on finding type constraints for compound values (arrays and objects),
+Before we endeavour on finding type constraints for compound values (arrays and objects),
 it might be instructive to find a notion of _free type_, that is a type with no
 additional laws but the ones stated above.
 Given a term with arbitrary constructors we can infer a _free type_ for every
@@ -860,25 +829,22 @@ instance (Ord a, Eq a)         => Monoid (FreeType a) where
   mempty = FreeType Set.empty
 ```
 
-This definition is deemed sound, and may be applicable
+This definition is deemed sound and applicable
 to finite sets of terms or values.
 For a set of values: `["yes", "no", "error"]`, we may
 reasonably consider that type is an appropriate approximation of C-style
 enumeration, or Haskell-style ADT without constructor arguments.
 However, the deficiency of this notion of *free type* is that it does not allow
-generalizing in infinite and recursive domains! It only allows utilizing objects from
-the sample.
+generalizing in infinite and recursive domains! It only allows to utilize objects from the sample.
 
 ### Presence and absence constraint {#sec:presence-absence-constraints}
 
 We call the degenerate case of `Typelike` a *presence or absence constraint*.
-It just checks that the type contains at least one observation of the input value,
-or no observations at all. It is important as it can be used
+It just checks that the type contains at least one observation of the input value or no observations at all. It is vital as it can be used
 to specify an element type of an empty array.
-After seeing `true` value we also expect `false`, so we can say that
-it is also basic constraint for boolean values.
-The same is valid for `null` values, as there is only one `null` value
-to ever observe.
+After seeing `true` value, we also expect `false`, so we can say that
+it is also a primary constraint for pragmatically indivisible like the set of boolean values.
+The same observation is valid for `null` values, as there is only one `null` value ever to observe.
 
 ``` {#presence-absence-constraints .haskell}
 type BoolConstraint       = PresenceConstraint Bool
@@ -909,10 +875,10 @@ instance PresenceConstraint a `Types` a where
 
 #### Variants
 
-Variants of two mutually exclusive types are also simple. They can be implement them with a
+It is simple to represent a variant of two _mutually exclusive_ types. They can be implemented with a
 type related to `Either` type that assumes these types are exclusive, we denote it by `:|:`.
 In other words for `Int :|: String` type, we first control whether the value is
-an `Int`, and if this check fails, we attempt to parse it as `String`.
+an `Int`, and if this check fails, we attempt to check it as a `String`.
 Variant records are slightly more complicated, as it may be unclear which
 typing is better to use:
 
@@ -945,9 +911,9 @@ The best attempt here is to rely on the available examples being
 reasonably exhaustive. That is, we can estimate how many examples we
 have for each, and how many of them match. Then, we compare this number
 with type complexity (with options being more complex
-to process, because they need additional `case` expression.)
+to process because they need additional `case` expression.)
 In such cases,
-the latter definition has only one `Maybe` field (on the toplevel,
+the latter definition has only one `Maybe` field (on the toplevel
 optionality is one),
 while the former definition has four `Maybe` fields (optionality is four).
 When we obtain more samples, the pattern emerges:
@@ -982,8 +948,8 @@ When presented with several alternate representations
 from the same set of observations, we will use this function
 to select the least complex representation of the type.
 For flat constraints as above, we infer that they
-offer no optionality when no observations occured (cost of `mempty` is $0$),
-otherwise the cost is $1$.
+offer no optionality when no observations occurred (cost of `mempty` is $0$),
+otherwise, the cost is $1$.
 Type cost should be non-negative, and non-decreasing when we add new
 observations to the type.
 
@@ -991,7 +957,7 @@ observations to the type.
 -- Considering that types `beyond` are to be avoided,
 -- we can assign conceptual _infinity_ to these values.
 -- For the implementation purposes we will represent
--- it by the value so high, that is unlikely to ever occur
+-- it by the value so high, that is unlikely ever to occur
 -- in practical types, but still small enough that we
 -- can add it without checking for overflow.
 
@@ -1172,12 +1138,12 @@ independent, we can store the information about both options separately
 in a record[^13]. It should be noted that this representation is similar to *intersection
 type*: any value that satisfies `ObjectConstraint` must
 conform to both `mappingCase`, and `recordCase`.
-Also this *intersection approach* in order to address
-alternative union type representations benefits from  *principal type property*,
-meaning that a principal type is used to simply acquire the information
-corresponding to different representations and handle it separately.
+Also, this *intersection approach* in order to address
+alternative union type representations benefit from  *principal type property*,
+meaning that a principal type serves to acquire the information
+corresponding to different representations and handle them separately.
 Since we plan to choose only one representation for the object,
-we can say that minimum cost of this type is a minimum of component costs.
+we can say that the minimum cost of this type is the minimum of component costs.
 
 ``` {#object-constraint .haskell}
 data ObjectConstraint = ObjectNever -- mempty
@@ -1227,13 +1193,13 @@ obtain information about all possible representations of an array,
 differentiating between an array of the same elements,
 and a row with the type depending on a column.
 We need to acquire the information for both alternatives separately, and
-then, to measure a relative likelihood of either cases, before mapping
+then, to measure a relative likelihood of either case, before mapping
 the union type to Haskell declaration.
 Here, we specify the records for two different possible representations:
 
 ``` {.haskell #array-constraint}
 data ArrayConstraint = ArrayNever -- mempty
-   | ArrayConstraint { arrayCase :: UnionType, rowCase :: RowConstraint }
+   | ArrayConstraint { rowCase :: RowConstraint, arrayCase :: UnionType }
 ```
 ``` {.haskell #array-constraint .hidden}
   deriving (Show, Eq, Generic)
@@ -1252,27 +1218,23 @@ instance Semigroup ArrayConstraint where
   a          <> ArrayNever = a
   a1 <> a2 =
     ArrayConstraint {
-      arrayCase = ((<>) `on` arrayCase) a1 a2
-    , rowCase   = ((<>) `on` rowCase  ) a1 a2
+      rowCase   = ((<>) `on` rowCase  ) a1 a2
+    , arrayCase = ((<>) `on` arrayCase) a1 a2
     }
 ```
 
 Semigroup operation just merges information on the components,
 and the same is done when inferring types or checking them:
-For the arrays, we plan to again choose only one
-of possible representations, so the cost of optionality
-is the lesser of the costs of the representation-specific constraints.
+For the arrays, we plan to choose again only one
+of possible representations, so the cost of optionality is the lesser of the costs of the representation-specific constraints.
 
 ``` {.haskell #array-constraint}
 instance ArrayConstraint `Types` Array where
-    infer vs = ArrayConstraint {
-        arrayCase = mconcat (infer <$> Foldable.toList vs)
-      , rowCase   =          infer                     vs }
-
+    infer vs = ArrayConstraint { rowCase = infer vs
+      , arrayCase = mconcat (infer <$> Foldable.toList vs) }
     check ArrayNever           vs = False
-    check ArrayConstraint {..} vs =
-         and (check arrayCase <$> Foldable.toList vs)
-      &&      check rowCase                       vs
+    check ArrayConstraint {..} vs = check rowCase vs
+      && and (check arrayCase <$> Foldable.toList vs)
 ```
 
 ```{.haskell #object-constraint .hidden}
@@ -1289,8 +1251,7 @@ A row constraint is valid only if there is the same number of entries in
 all rows, which is represented by escaping the `beyond` set
 whenever there is an uneven number of columns.
 Row constraint remains valid only if both
-constraint describe record of the same length,
-otherwise we yield `RowTop` to indicate that it is
+constraint describe the record of the same length; otherwise, we yield `RowTop` to indicate that it is
 no longer valid.
 In other words, `RowConstraint` is a *levitated
 semilattice*[@levitated-lattice]^[_Levitated lattice_ is created by appending distinct `bottom` and `top` to a set that does not possess them by itself.] with a neutral element over the content type
@@ -1352,7 +1313,7 @@ instance TypeCost RowConstraint where
 ### Combining the union type
 
 It should note that given the constraints for the different type constructors,
-the union type can be considered as mostly a generic `Monoid` instance[@generic-monoid].
+the union type can be considered as mostly a generic `Monoid` instance [@generic-monoid].
 Merging information with `<>` and `mempty` follow the pattern above, by just lifting
 operations on the component.
 
@@ -1414,8 +1375,8 @@ showsElts elts =
 The generic structure of union type can be explained by the fact that
 the information contained in each record field is *independent*
 from the information contained in other fields.
-It means that we perform anti-unification independently over different
-dimensions.
+It means that we generalize independently over different
+dimensions^[In this example, JSON terms can be described by terms without variables, and sets of tuples for dictionaries, so generalization by anti-unification is straightforward.]
 
 ``` {#type .haskell .hidden}
 instance Monoid UnionType where
@@ -1504,11 +1465,10 @@ To explain this, the other example can be considered:
 ```
 
 First, we need to identify it as a list of similar elements. 
-Second, we note, that there are multiple instances of each record example. We
+Second, there are multiple instances of each record example. We
 consider that the best approach would be to use the multisets of
-inferred records instead of normal sets.
-To find the best representation, we can a type complexity,
-and attempt to minimize the term.
+inferred records instead.
+To find the best representation, we can a type complexity, and attempt to minimize the term.
 Next step is to detect the similarities between type descriptions
 introduced for different parts of the term:
 
@@ -1560,7 +1520,7 @@ instance          ty  `Types` term
 
 
 Therefore, at each step, we may need to maintain a **cardinality** of
-each possible value, and being provided with sufficient number of
+each possible value, and is provided with sufficient number of
 samples, we may attempt to detect[^15].
 To preserve efficiency, we may need to merge whenever the number of
 alternatives in a multiset crosses the threshold. We can attempt to
@@ -1571,9 +1531,9 @@ narrow strings only in the cases when cardinality crosses the threshold.
 The final touch would be to perform the post-processing of an assigned
 type before generating it to make it more resilient to common
 uncertainties.
-It should be noted that these assumptions may bypass the defined
+These assumptions may bypass the defined
 least-upper-bound criterion specified in the initial part of the paper; however,
-they prove to work well in practice.
+they prove to work well in practice[@json-autotype-prezi;@quicktype].
 
 If we have no observations corresponding to an array type, it can be
 inconvenient to disallow an array to contain any values at all.
@@ -1582,8 +1542,7 @@ the `mempty` into a final `Typelike` object aiming to
 introduce a representation allowing the occurrence of any `Value` in the input.
 That still preserves the validity of the typing.
 We note that the program using our types must not have any assumptions about
-these values; however, at the same time it should be able to print them for
-debugging purposes.
+these values; however, at the same time, it should be able to print them for debugging purposes.
 
 ``` {#fig:dataflow .dot width="48%" height="13%" .hidden}
 digraph {
@@ -1617,7 +1576,7 @@ digraph {
 }
 ```
 
-In most JSON documents, we observe that the same object can be described
+In most JSON documents, we observe that the same object can be simultaneously described
 in different parts of sample data structures. Due to this reason, we
 compare the sets of labels assigned to all objects and propose to unify
 those that have more than 60% of identical labels.
@@ -1634,44 +1593,45 @@ In the present paper, we only discuss typing of tree-like values.
 However, it is natural to scale this approach to multiple types in APIs,
 in which different types are referred to by name and possibly contain
 each other.
-To address these cases, we plan to show show that the environment of `Typelike` objects
+To address these cases, we plan to show that the environment of `Typelike` objects
 is also `Typelike`, and that constraint generalization (_anti-unification_)
 can be extended in the same way. 
 
 It should be noted that many `Typelike` instances for non-simple types usually
-follow one the two patterns of (1) for finite sum of disjoint constructors,
+follow one the two patterns of (1) for a finite sum of disjoint constructors,
 we bin this information by each constructor during the inference (2) for typing terms with multiple alternative
 representations, we infer all constraints separately for each alternative representation.
-In both cases, `Generic` derivation procedure for the `Monoid`, `Typelike`, and `TypeCost` instances is possible[@generics,@generic-monoid].
-This allows us to design a type system by declaring datatypes themselves, and leave implementation to the compiler.
+In both cases, `Generic` derivation procedure for the `Monoid`, `Typelike`, and `TypeCost` instances is possible [@generics,@generic-monoid].
+This allows us to design a type system by declaring datatypes themselves and leave implementation to the compiler.
 Manual implementation would be only left for special cases, like `StringConstraint` and `Counted` constraint.
 
-Finally we believe that we can explain duality of categorical framework of `Typelike` categories
-and use unification instead of generalization (anti-unification) as a type inference mechanism. The `beyond` set would then correspond
+Finally, we believe that we can explain the duality of categorical framework of `Typelike` categories
+and use generalization (anti-unification) instead of unification (or narrowing) as a type inference mechanism. The `beyond` set would then correspond
 to a set of error messages, and a result of the inference would represent a principal type in Damas-Milner sense.
 
 Conclusion
 ----------
 
 In the present study, we aimed to derive the types that were valid with
-respect to the provided specification, thereby obtaining the information
-from the input in most comprehensive way.
+respect to the provided specification^[Specification was given in the motivation section descriptions of JSON input examples, and the expected results given as Haskell type declarations.], thereby obtaining the information
+from the input in the most comprehensive way.
 We defined type inference as representation learning and type system
 engineering as a meta-learning problem in which the **priors
 corresponding to the data structure induced typing rules**.
+We show how the type safety can be quickly tested as equational laws with QuickCheck, which is a useful prototyping tool, and may be supplemented with fully formal proof in the future.
 
 We also formulated the **union type discipline** as
 manipulation of `Typelike` commutative monoids, that
 represented knowledge about the data structure.
 In addition, we proposed a union type system engineering methodology
-that was logically justified by a theoretical criteria. We demonstrated that it
+that was logically justified by theoretical criteria. We demonstrated that it
 was capable of consistently explaining the decisions made in practice.
 We followed a strictly constructive procedure,
 that can be implemented generically.
 
-We consider that this kind of *formally justified type system
-engineering* can become widely used in practice, replacing *ad-hoc*
-approaches in the future.
+We hope that this kind of straightforward type system
+engineering will become widely used in practice, replacing less modular
+approaches of the past.
 The proposed approach may be used to underlie the way towards formal
 construction and derivation of type systems based on the specification
 of value domains and design constraints.
@@ -1681,6 +1641,31 @@ Bibliography {#bibliography .unnumbered}
 
 ::: {#refs}
 :::
+
+# Appendix: all laws of Typelike as equations
+
+1. `mempty` contains no terms:
+   \[ check mempty v = False \]
+
+2. `beyond` contains all terms:
+   \[ beyond t => check t v = True \]
+
+3. Fusion keeps terms:
+   \[ check t_1 v => check (t_1 <> t_2) v \]
+   \[ check t_2 v => check (t_1 <> t_2) v \]
+
+4. Inferred type contains the term from which it was inferred:
+   \[ check (infer v) v = True \]
+
+5. Semigroup law:
+  * associativity:
+    \[ t_1 <> (t_2 <> t_3) = (t_1 <> t_2) <> t_3 \]
+
+6. Monoid laws:
+  * left identity:
+    \[ mempty <> t = t \]
+  * right identity:
+    \[ t <> mempty = t ]
 
 # Appendix: definition module headers {#appendix-module-headers .unnumbered}
 
@@ -1738,7 +1723,7 @@ import           Missing
 <<representation>>
 ```
 
-# Appendix: test suite {.unnumbered}
+# Appendix: test suite {.unnumbered #sec:test-suite}
 
 ```{.haskell file=test/spec/Spec.hs}
 {-# language FlexibleInstances     #-}
@@ -1901,25 +1886,6 @@ instance (Ord               v
   typeCost  Full        = inf
   typeCost (FreeType s) = TyCost $ Set.size s
 
-{-
-instance (Eq                      a
-         ,Ord                     a
-         ,GenUnchecked            a
-         ,LessArbitrary           a
-         ,LessArbitrary (FreeType a)
-         ,Arbitrary     (FreeType a))
-      =>  GenUnchecked  (FreeType a) where
-  genUnchecked    = fasterArbitrary
-  shrinkUnchecked Full                  = []
-  shrinkUnchecked FreeType { captured } =
-       map (FreeType . Set.fromList)
-     $ shrinkUnchecked
-     $ Set.toList captured
-
-instance Validity (FreeType a) where
-  validate _ = validate True
- -}
-
 instance LessArbitrary (PresenceConstraint a) where
   lessArbitrary = genericLessArbitraryMonoid
 instance Arbitrary     (PresenceConstraint a) where
@@ -1985,15 +1951,6 @@ instance LessArbitrary UnionType where
 instance Arbitrary     UnionType where
   arbitrary = fasterArbitrary
 
-{-
-instance GenUnchecked UnionType where
-  genUnchecked    = arbitrary
-  shrinkUnchecked = shrink
- -}
-
-{-
-instance Validity UnionType where
-  validate _ = validate True-}
 
 shrinkSpec :: forall    a.
              (Arbitrary a
@@ -2303,7 +2260,7 @@ When we define a single constructor,
 we allow field and constructor names to be empty strings (`""`),
 assuming that the relevant identifiers will be put there
 by post-processing that will pick names using types of fields
-and their containers[@xml-typelift].
+and their containers [@xml-typelift].
 ```{.haskell #representation}
 data HCons = HCons {
               name ::  HConsId
@@ -2553,8 +2510,7 @@ import           Data.Time.Calendar (Day)
 [^8]: May sound similar until we consider adding more information to the
     type.
 
-[^9]: It should be noted that many but not all type constraints are
-    semilattice. Please refer to the counting example below.
+[^9]: Note that many but not all type constraints are semilattice. Please refer to the counting example below.
 
 [^10]: So both for ∀`a(<> a)` and ∀`a.(a<>)`,
        the result is kept in the `beyond` set.
@@ -2565,9 +2521,7 @@ import           Data.Time.Calendar (Day)
 [^13]: The choice of representation will be explained later. Here we only
     consider acquiring information about possible values.
 
-[^14]: The question may arise: what is the *union type* without *set
-    union*? When the sets are disjoint, we just put the values in different
-    bins to enable easier handling.
+[^14]: The question may arise: what is the *union type* without *set union*? When the sets are disjoint, we just put the values in different bins to enable easier handling.
 
 [^15]: If we detect a pattern too early, we risk to make the types too
     narrow to work with actual API responses.
