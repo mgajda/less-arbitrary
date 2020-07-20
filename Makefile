@@ -23,7 +23,7 @@ OPTIONS=--mathml				\
 	--from=markdown+tex_math_dollars+yaml_metadata_block+footnotes+yaml_metadata_block \
 	--columns 40 \
 	--csl ${CSL} \
-	--filter pandoc-filter-graphviz
+	--filter pandoc-filter-graphviz \
 
 #	--listings \
 #	--filter pandoc-citeproc		

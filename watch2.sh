@@ -3,7 +3,7 @@
 NAME=less-arbitrary
 
 make;
-open out/${NAME}.pdf &
+xdg-open out/${NAME}.pdf &
 
 while inotifywait $(cat inputs.list) \
                   towards-better-union.bib \
