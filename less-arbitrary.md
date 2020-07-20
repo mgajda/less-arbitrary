@@ -1,11 +1,14 @@
 ---
+review: true
 title:  "Less Arbitrary waiting time"
 shorttitle: "Less Arbitrary"
 author:
   - name: Michał J. Gajda
-    email: mjgajda@migamake.com
-    affiliation:
-      institution: Migamake Pte Ltd
+    orcid:       "0000-0001-7820-3906"
+affiliation:
+  institution: "Migamake Pte Ltd"
+  email:        mjgajda@migamake.com
+  url:         "https://migamake.com"
 tags:
   - Haskell
   - property testing
@@ -20,7 +23,7 @@ description: |
 link: "https://gitlab.com/migamake/less-arbitrary"
 bibliography:
   - towards-better-union.bib
-csl: acm-template/acm-sig-proceedings.csl
+conference: WFLP
 prologue: |
   \let\longtable\tabular
   \let\endlongtable\endtabular

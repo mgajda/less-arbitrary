@@ -8,7 +8,7 @@ affiliation:
   institution: "Migamake Pte Ltd"
   email:        mjgajda@migamake.com
   url:         "https://migamake.com"
-#review: true
+review: true
 tags:
   - Haskell
   - JSON
@@ -77,7 +77,7 @@ It uses union type theory, but it also lacks an extensible theoretical framework
 F\# type providers for JSON facilitate deriving a schema
 automatically; however, a type system does not support union of alternatives and is given shape inference algorithm, instead of design driven by desired properties [@type-providers-f-sharp].
 The other attempt to automatically infer schemas has been introduced in the PADS project [@pads,@learnpads]. Nevertheless, it has not specified a generalized type-system design methodology.
-One approach uses Markov chains to derive JSON types [@quicktype]^[This approach uses Markov chains to infer best of alternative type representations, which to our knowledge has not been exhaustively tackled by formal approaches.].
+One approach uses Markov chains to derive JSON types [@quicktype]^[This approach uses Markov chains to infer best of alternative type representations.].
 This approach requires considerable engineering time due to the implementation of
 unit tests in a case-by-case mode, instead of formulating laws applying to all types.
 Moreover, this approach lacks a sound underlying theory.
@@ -1642,32 +1642,20 @@ Bibliography {#bibliography .unnumbered}
 ::: {#refs}
 :::
 
-# Appendix: all laws of Typelike as equations
+# Appendix: all laws of Typelike
 
-1. `mempty` contains no terms:
-   \[ check mempty v = False \]
+ $$ \begin{array}{l l l l lllllcr}
+                    &     &   &             & \textrm{check} & \textrm{mempty} & v & = & \textbf{False} & \ & \textit{(mempty contains no terms)} \\
+    \textrm{beyond} & t   &   & \Rightarrow & \textrm{check} & t               & v & = & \textbf{True} & \hspace{1cm}\hfill{} & \textit{(beyond contains all terms)} \\
+    \textrm{check}  & t_1 & v & \Rightarrow & \textrm{check} & (t_1 \diamond t_2) & v & = & \textbf{True} & \hspace{1cm}\hfill{} & \textit{(left fusion keeps terms)} \\
+    \textrm{check}  & t_2 & v & \Rightarrow & \textrm{check} & (t_1 \diamond t_2) & v & = & \textbf{True} & \hspace{1cm}\hfill{} & \textit{(right fusion keeps terms)} \\
+                    &     &   &             & \textrm{check} & (\textrm{infer}\ v) & v & = & \textbf{False} & \ & \textit{(inferred type contains the source term)} \\
+                    &     &   &             \multicolumn{4}{r}{t_1 \diamond (t_2 \diamond t_3)} & = & t_1 \diamond (t_2 \diamond t_3) & \ & \textit{(semigroup associativity)} \\
+                    &     &   &             \multicolumn{4}{r}{\textrm{mempty} \diamond t} & = & t & \ & \textit{(left identity of the monoid)} \\
+                    &     &   &             \multicolumn{4}{r}{t \diamond \textrm{mempty}} & = & t & \ & \textit{(right identity of the monoid)} \\
+    \end{array} $$
 
-2. `beyond` contains all terms:
-   \[ beyond t => check t v = True \]
-
-3. Fusion keeps terms:
-   \[ check t_1 v => check (t_1 <> t_2) v \]
-   \[ check t_2 v => check (t_1 <> t_2) v \]
-
-4. Inferred type contains the term from which it was inferred:
-   \[ check (infer v) v = True \]
-
-5. Semigroup law:
-  * associativity:
-    \[ t_1 <> (t_2 <> t_3) = (t_1 <> t_2) <> t_3 \]
-
-6. Monoid laws:
-  * left identity:
-    \[ mempty <> t = t \]
-  * right identity:
-    \[ t <> mempty = t ]
-
-# Appendix: definition module headers {#appendix-module-headers .unnumbered}
+# Appendix: definition module headers {#appendix-module-headers}
 
 ```{.haskell language="Haskell" file=src/Unions.hs}
 {-# language AllowAmbiguousTypes        #-}
@@ -1723,7 +1711,7 @@ import           Missing
 <<representation>>
 ```
 
-# Appendix: test suite {.unnumbered #sec:test-suite}
+# Appendix: test suite {#sec:test-suite}
 
 ```{.haskell file=test/spec/Spec.hs}
 {-# language FlexibleInstances     #-}
@@ -2154,7 +2142,7 @@ representationSpec  = do
     exitFailure
 ```
 
-# Appendix: package dependencies {#appendix-package-dependencies .unnumbered}
+# Appendix: package dependencies {#appendix-package-dependencies}
 
 ```{.yaml .hpack file=package.yaml}
 name: union-types
@@ -2223,7 +2211,7 @@ tests:
       - quickcheck-instances
 ```
 
-Appendix: representation of generated Haskell types {.unnumbered}
+Appendix: representation of generated Haskell types
 ======================================
 
 We will not delve here into identifier conversion
