@@ -1,27 +1,11 @@
 ---
 title:  "Towards a more perfect union type"
-author:
-  - name: Michał J. Gajda
-affiliation:
-  institution: "Migamake Pte Ltd"
-  email:        mjgajda@migamake.com
-  url:         "https://migamake.com"
-review: true
-date:   2020-06-19
 description: |
   Proposes a new framework for union types
   that uses monoid and complete functions,
   and more accessible theoretical treatment
   than ad-hoc typing relations.
 link: "https://gitlab.com/migamake/json-autotype"
-tables: true
-#listings: true
-acks: |
-  The author thanks for all tap-on-the-back donations to his past projects.
-
-  We wrote the article with the great help of bidirectional literate programming [@literate-programming] tool [@entangled],
-  Pandoc [@pandoc] markdown publishing system and live feedback from GHCid [@ghcid].
-title:  "Towards the more perfect union type"
 author:
   - Michał J. Gajda
   - "https://www.migamake.com"
@@ -41,43 +25,12 @@ abstract: |
   from multiple examples.
   The categorical framework is generic and easily extensible.
 date:   2020-09-04
-link: "https://gitlab.com/migamake/philosophy-articles/towards-better-union"
 tables: true
 listings: true
-acks: |
-
-  Migamake Pte Ltd sponsored the effort.
-  We thank Ronan Orozco for his contribution to data scraping.
 header-includes: |
+  \usepackage{tikz}
   \usepackage{tikz-cd}
 ---
-
-
-# Property testing
-
-::: {.incremental}
-
-* Tests on sets not values
-* Less work to make exhaustive tests
-* Problem with recursive data structures
-
-```{.haskell}
-prop_showRead :: MyType -> Bool
-prop_showRead x = read (show x) == x
-
-main = quickCheck prop_showRead
-```
-```
-> +++ OK, passed 100 tests.
-```
-
-:::
-
----
----
-
-Introduction
-============
 
 # Plan
 
@@ -85,6 +38,9 @@ Introduction
 
 * Typing dynamic languages
 * JSON
+* Typelike framework
+* Examples of implementation
+* Summary
 
 :::
 
@@ -104,16 +60,19 @@ Introduction
 . . .
 
 ``` {.haskell file=refs/Data/Aeson.hs}
-data Value = Object (Map String Value) | Array [Value] | Null
-           | Number Scientific         | String Text   | Bool Bool
+data Value = Object (Map String Value)
+           | Array [Value]
+           | Null
+           | Number Scientific
+           | String Text
+           | Bool Bool
 ```
 
 # Related work
 
-* quicktype [@quicktype]
-* F# type providers [@type-providers-f-sharp]
-* XDuce
-* Castagna framework
+* quicktype
+* F# type providers
+* XDuce and Castagna framework
 
 # Key features
 
@@ -123,17 +82,18 @@ data Value = Object (Map String Value) | Array [Value] | Null
 
 # Motivation
 
+Subsets of data within a single constructor:
+
 ::: incremental
 
-1.  Subsets of data within a single constructor:
 
-    a.   *API argument is an email* -- it is a subset of valid `String`
-        values that can be validated on the client-side.
-    b.   *The page size determines the number of results to return (min: 10,
-            max:10,000)* -- it is also a subset of integer values (`Int`) between $10$, and $10,000$
-    c. _The `date` field contains ISO8601 date_ -- a record field represented
-            as a `String` that contains a calendar date in the format
-            `"2019-03-03"`
+*   *API argument is an email* -- it is a subset of valid `String`
+  values that can be validated on the client-side.
+*   *The page size determines the number of results to return (min: 10,
+  max:10,000)* -- it is also a subset of integer values (`Int`) between $10$, and $10,000$
+* _The `date` field contains ISO8601 date_ -- a record field represented
+  as a `String` that contains a calendar date in the format
+  `"2019-03-03"`
 
 :::
 
@@ -141,21 +101,6 @@ data Value = Object (Map String Value) | Array [Value] | Null
 
 ``` {.haskell language="Haskell" file=test/example1a.result .hidden}
 newtype Example1a = Example Email
-```
-
-# Motivation: alternative objects
-
-``` {.json language="JSON" file=test/example1a.json .hidden}
-{"message": "Where can I submit my proposal?",
-    "uid" : 1014}
-{"error"  : "Authorization failed",
-   "code" : 401}
-```
-
-```{.haskell}
-data MessageOrError =
-    Message { message :: String, uid  :: Int }
-  | Error   { error   :: String, code :: Int }
 ```
 
 # Motivation: optional fields
@@ -173,30 +118,35 @@ data MessageOrError =
 newtype Example2 = Example2 { page_size :: Maybe Int }
 ```
 
-# Motivation: alternative objects
-
-Answer to a query is either a number of registered objects, or an identifier of a singleton object.
-
-``` {.haskell file=test/example3.result .hidden}
-newtype Example3 = Example3 (String :|: Int)
-```
-
 # Motivation: variant records
 
-Variant records: *Answer contains either a text message with a user identifier or an error.* --
-That can be represented as one of following options:
+*Answer contains either a text message with a user identifier or an error.*
 
 ``` {.json file=test/example4.json}
-{"message" : "Where can I submit my proposal?", "uid" : 1014}
-{"message" : "Submit it to HotCRP",             "uid" :  317}
-{"error"   : "Authorization failed",            "code":  401}
-{"error"   : "User not found",                  "code":  404}
+{"message" : "Where can I submit my proposal?",
+ "uid"     : 1014}
+{"message" : "Submit it to HotCRP",
+ "uid"     :  317}
+{"error"   : "Authorization failed",
+ "code"    :  401}
+{"error"   : "User not found",
+ "code"    :  404}
 ```
 
 ```{.haskell file=test/example4.result}
 data Example4 = Message { message :: String, uid  :: Int }
               | Error   { error   :: String, code :: Int }
 ```
+
+# Motivation: alternative objects
+
+*Answer to a query is either a number of registered objects, or an identifier of a singleton object.*
+
+``` {.haskell file=test/example3.result .hidden}
+newtype Example3 = Example3 (String :|: Int)
+```
+
+
 
 # Motivation: array of records
 
@@ -216,29 +166,47 @@ data Example5 = Example5 { col1 :: Int
 
 # Motivation: maps
 
-Maps of identical objects (example from [@quicktype]):
+Example of map of identical objects:
 
 ``` {.json file=test/example6.json}
-{   "6408f5": { "size":       969709    , "height":    510599
-              , "difficulty": 866429.732, "previous": "54fced" },
-    "54fced": { "size":       991394    , "height":    510598
-              , "difficulty": 866429.823, "previous": "6c9589" },
-    "6c9589": { "size":       990527    , "height":    510597
-              , "difficulty": 866429.931, "previous": "51a0cb" } }
+{   "6408f5": { "size":       969709
+              , "height":    510599
+              , "difficulty": 866429.732
+              , "previous": "54fced" },
+    "54fced": { "size":       991394
+              , "height":    510598
+              , "difficulty": 866429.823
+              , "previous": "6c9589" },
+    "6c9589": { "size":       990527
+              , "height":     510597
+              , "difficulty": 866429.931
+              , "previous":  "51a0cb"
+              }
+}
 ```
 
+# Motivation: **objects** vs maps
+
 ``` {.haskell file=test/example6-single-key.result}
-data Example = Example { f_6408f5 :: O_6408f5, f_54fced :: O_6408f5
+data Example = Example { f_6408f5 :: O_6408f5
+                       , f_54fced :: O_6408f5
                        , f_6c9589 :: O_6408f5 }
-data O_6408f5 = O_6408f5 { size, height :: Int, difficulty :: Double
-                         , previous     :: String }
+data O_6408f5 = O_6408f5 {
+         size       :: Int
+       , height     :: Int
+       , difficulty :: Double
+       , previous   :: String }
 ```
-. . .
+
+# Motivation: objects vs **maps**
 
 ```{.haskell file=test/example6-multi-key.result}
 data ExampleMap = ExampleMap (Map Hex ExampleElt)
-data ExampleElt = ExampleElt { size :: Int, height :: Int
-   , difficulty :: Double, previous :: String }
+data ExampleElt = ExampleElt {
+        size       :: Int
+      , height     :: Int
+      , difficulty :: Double
+      , previous   :: String }
 ```
 
 ::: notes
@@ -299,21 +267,23 @@ Do not require _idempotence_, nor _commutativity_ of `<>`.
 class Typelike ty => ty `Types` val where
    infer ::       val -> ty
    check :: ty -> val -> Bool
-   -- >>> check (infer a) a
-   -- True
-   -- >>> check mempty a
-   -- False
-   -- >>> beyond a ==> check a
-   -- True
-   -- >>> check a v ==> check (a<>b) v
-   -- True
-   -- >>> check b v ==> check (a<>b) v
-   -- True
 ```
 
-# Typelike
+# Laws of Typelike
 
-```{=latex}
+ $$ \begin{array}{l l l l lllllcr}
+                    &     &   &             & \textrm{check} & \textrm{mempty} & v & = & \textbf{False} & \ &  \\
+    \textrm{beyond} & t   &   & \Rightarrow & \textrm{check} & t               & v & = & \textbf{True} & \hspace{1cm}\hfill{} &  \\
+    \textrm{check}  & t_1 & v & \Rightarrow & \textrm{check} & (t_1 \diamond t_2) & v & = & \textbf{True} & \hspace{1cm}\hfill{} &  \\
+    \textrm{check}  & t_2 & v & \Rightarrow & \textrm{check} & (t_1 \diamond t_2) & v & = & \textbf{True} & \hspace{1cm}\hfill{} &  \\
+                    &     &   &             & \textrm{check} & (\textrm{infer}\ v) & v & = & \textbf{False} & \ &  \\
+                    &     &   &             \multicolumn{4}{r}{t_1 \diamond (t_2 \diamond t_3)} & = & t_1 \diamond (t_2 \diamond t_3) & \ &  \\
+                    &     &   &             \multicolumn{4}{r}{\textrm{mempty} \diamond t} & = & t & \ &  \\
+                    &     &   &             \multicolumn{4}{r}{t \diamond \textrm{mempty}} & = & t & \ &  \\
+    \end{array} $$
+
+# Typelike {.fragile}
+
 \begin{center}
 % https://tikzcd.yichuanshen.de/#N4Igdg9gJgpgziAXAbVABwnAlgFyxMJZAJgBpiBdUkANwEMAbAVxiRAB12BbOnAC1zAAKgE80MAL4B9AIwAeAHyce-QaPHTiICaXSZc+QigAM5KrUYs2y3gJzCxk2dt0gM2PASIAWM9XrMrIgc3LZqjpoueh6GRGTe5gFWwTaq9kIATiwSUW76nkYkpMaJlkEhKnYOGrIABJx4XPD1oWnVTlo60QZeKL4J-mXWrVUAamWRXXkxvcimAxaBw5WC44HSMtrmMFAA5vBEoABmGRBcSDLUOBBIAMzUAEYwYFB3piBwAkc4SO8MWGBypBASBqHwYHRXsFgawrnQsAw2DDQSAGHQngwAAr5WLBAHYWC5E5nX5XG6Ie6LZIVML2ADG4LpAGtOLUkh0UU8XkhvABOKbE86Id7XO6PZ5QgC0fMGSxSI0EDJgzNZ7I2KLRGOxMyMIAyWF2fB+AtOQrIIFFFJNJMQlwt5Nu1qFdst73ZbEUqSq6g5TqQ5tdsupXvCNXkCg16JgWJxvT1BqNRNNPLJpKp5UUSZtvnt-qD5U4aCwUi01E10e1PV1DBg3yzQpzlrt7vlRecZajMZ1bH1huNrkFSAAbKnbfnlrTgACjjAMjk-YgAKyj80tmltaeznIdrWx3W9xML5e5inj+UremMlnsWoAd1wfAkrJ9Jfrw9HlLXIcvyuvd4fT43i+mw7hWe49gmxoUBIQA
 \begin{tikzcd}
@@ -324,52 +294,12 @@ class Typelike ty => ty `Types` val where
 \mathit{Value}_1 \arrow[uu, "\mathit{infer}"] \arrow[rr, "\mathit{check\ with}\ Type_1"']     &  & \mathit{True}                                                                                                                              &  & \mathit{Value}_2 \arrow[uu, "\mathit{infer}"'] \arrow[ll, "\mathit{check\ with}\ Type_2"]
 \end{tikzcd}
 \end{center}
-```
-
-# Laws of Typelike
-
- $$ \begin{array}{l l l l lllllcr}
-                    &     &   &             & \textrm{check} & \textrm{mempty} & v & = & \textbf{False} & \ & \textit{(mempty contains no terms)} \\
-    \textrm{beyond} & t   &   & \Rightarrow & \textrm{check} & t               & v & = & \textbf{True} & \hspace{1cm}\hfill{} & \textit{(beyond contains all terms)} \\
-    \textrm{check}  & t_1 & v & \Rightarrow & \textrm{check} & (t_1 \diamond t_2) & v & = & \textbf{True} & \hspace{1cm}\hfill{} & \textit{(left fusion keeps terms)} \\
-    \textrm{check}  & t_2 & v & \Rightarrow & \textrm{check} & (t_1 \diamond t_2) & v & = & \textbf{True} & \hspace{1cm}\hfill{} & \textit{(right fusion keeps terms)} \\
-                    &     &   &             & \textrm{check} & (\textrm{infer}\ v) & v & = & \textbf{False} & \ & \textit{(inferred type contains the source term)} \\
-                    &     &   &             \multicolumn{4}{r}{t_1 \diamond (t_2 \diamond t_3)} & = & t_1 \diamond (t_2 \diamond t_3) & \ & \textit{(semigroup associativity)} \\
-                    &     &   &             \multicolumn{4}{r}{\textrm{mempty} \diamond t} & = & t & \ & \textit{(left identity of the monoid)} \\
-                    &     &   &             \multicolumn{4}{r}{t \diamond \textrm{mempty}} & = & t & \ & \textit{(right identity of the monoid)} \\
-    \end{array} $$
-
-# Flat type constraints
-
-```{.haskell}
-data NumberConstraint =
-    NCInt
-  | NCNever -- mempty
-  | NCFloat -- beyond
-  deriving(Eq,Show,Generic)
-
-instance Semigroup NumberConstraint where
-  NCFloat <> _       = NCFloat
-  _       <> NCFloat = NCFloat
-  NCNever <> a       = a
-  a       <> NCNever = a
-  NCInt   <> NCInt   = NCInt
-
-instance NumberConstraint `Types` Scientific where
-  infer sci
-    | base10Exponent sci >= 0 = NCInt
-  infer _                     = NCFloat
-  check NCFloat _   = True
-  check NCInt   sci = base10Exponent sci >= 0
-  check NCNever _   = False
-```
 
 # Presence and absence constraint
 
 ``` {#presence-absence-constraints .haskell}
-data PresenceConstraint a =
-    Present -- beyond
-  | Absent  -- mempty
+data PresenceConstraint a = Present -- beyond
+                          | Absent  -- mempty
 
 instance Semigroup (PresenceConstraint a) where
   Absent  <> a       = a
@@ -380,6 +310,28 @@ instance PresenceConstraint a `Types` a where
   infer _         = Present
   check Present _ = True
   check Absent  _ = False
+```
+
+# Flat type constraints
+
+```{.haskell}
+data NumberConstraint = NCInt
+                      | NCNever -- mempty
+                      | NCFloat -- beyond
+
+instance Semigroup NumberConstraint where
+  NCInt   <> NCInt   = NCInt
+  NCFloat <> _       = NCFloat -- beyond
+  _       <> NCFloat = NCFloat -- beyond
+  NCNever <> a       = a       -- mempty
+  a       <> NCNever = a       -- mempty
+
+instance NumberConstraint `Types` Scientific where
+  infer sci | base10Exponent sci >= 0 = NCInt
+  infer _                             = NCFloat
+  check NCInt   sci = base10Exponent sci >= 0
+  check NCFloat _   = True
+  check NCNever _   = False
 ```
 
 # Cost of optionality
@@ -396,33 +348,19 @@ instance Monoid    TyCost where mempty = 0
 newtype TyCost = TyCost Int
 ```
 
-```{.haskell #typecost .hidden}
-instance TypeCost IntConstraint where
-instance TypeCost NumberConstraint where
-instance TypeCost StringConstraint where
-instance TypeCost BoolConstraint where
-instance TypeCost NullConstraint where
-```
-
-# Object constraint
+# Mapping constraint
 
 ``` {.haskell }
-data MappingConstraint = MappingNever -- mempty
-   | MappingConstraint { keyConstraint   :: StringConstraint
-                       , valueConstraint :: UnionType        }
-
-instance TypeCost MappingConstraint where
-  typeCost MappingNever           = 0
-  typeCost MappingConstraint {..} = typeCost keyConstraint
-                                  + typeCost valueConstraint
-
-instance TypeCost MappingConstraint where
-  typeCost MappingNever           = 0
-  typeCost MappingConstraint {..} = typeCost keyConstraint
-                                  + typeCost valueConstraint
+data MappingConstraint =
+    MappingNever -- mempty
+  | MappingConstraint { keyConstraint  
+                          :: StringConstraint
+                      , valueConstraint
+                          :: UnionType        }
 ```
 
-# Object constraint 2
+# Mapping constraint 2
+
 ```{.haskell}
 instance Semigroup   MappingConstraint where
   MappingNever <> a = a  
@@ -433,25 +371,13 @@ instance Semigroup   MappingConstraint where
     , valueConstraint =
         ((<>) `on` valueConstraint) a b
     }
-
-instance MappingConstraint `Types`
-         Object where
-  infer obj = MappingConstraint
-                (foldMap infer $ Map.keys obj)
-                (foldMap infer            obj)
-  check MappingNever           _   = False
-  check MappingConstraint {..} obj =
-       all (check keyConstraint)
-           (Map.keys obj)
-    && all (check valueConstraint)
-           (Foldable.toList obj)
 ```
 
 # Record constraint
 
 ``` {.haskell #object-constraint}
 data RecordConstraint =
-    RCTop {- beyond -}
+    RCTop    {- beyond -}
   | RCBottom {- mempty -}
   | RecordConstraint { fields :: HashMap Text UnionType }
 
@@ -460,12 +386,6 @@ instance Semigroup   RecordConstraint where
     RecordConstraint     b = RecordConstraint $
          Map.intersectionWith (<>) a b
       <> (makeNullable <$> mapXor  a b)
-
-instance TypeCost RecordConstraint where
-  typeCost RCBottom = 0
-  typeCost RCTop    = inf
-  typeCost RecordConstraint { fields } =
-    Foldable.foldMap typeCost fields
 ```
 
 # RecordConstraint 2
@@ -475,35 +395,30 @@ instance RecordConstraint `Types` Object where
     infer = RecordConstraint    . Map.fromList
           . fmap (second infer) . Map.toList
     check RecordConstraint {fields} obj =
-         all (`elem` Map.keys fields) -- all object keys
-                    (Map.keys  obj)        -- present in type
-      && and (Map.elems $ Map.intersectionWith -- values check
+         all (`elem` Map.keys fields)
+                    (Map.keys  obj)
+      && and (Map.elems $ Map.intersectionWith
                             check fields obj)
-      && all isNullable (Map.elems $ fields `Map.difference` obj)
+      && all isNullable (Map.elems
+                        $ fields `Map.difference` obj)
          -- absent values are nullable
+```
 
+# Object constraint
+
+```{.haskell}
 data ObjectConstraint = ObjectNever -- mempty
   |  ObjectConstraint { mappingCase :: MappingConstraint
                       , recordCase  :: RecordConstraint } 
 
 instance Semigroup ObjectConstraint where
-  ObjectNever <> a = a
-  a <> ObjectNever = a
-  a <> b           =
-    ObjectConstraint                            {
-      mappingCase = ((<>) `on` mappingCase) a b
-    , recordCase  = ((<>) `on` recordCase ) a b }
-
+  a <> b = ObjectConstraint {
+             mappingCase = ((<>) `on` mappingCase) a b
+           , recordCase  = ((<>) `on` recordCase ) a b
+           }
+       
 instance ObjectConstraint `Types` Object where
   infer v = ObjectConstraint (infer v) (infer v)
-  check ObjectNever           _ = False
-  check ObjectConstraint {..} v = check mappingCase v
-                               && check recordCase  v
-
-instance TypeCost ObjectConstraint where
-  typeCost ObjectConstraint {..} = typeCost mappingCase
-                             `min` typeCost recordCase
-  typeCost ObjectNever           = 0
 ```
 
 # Array constraint
@@ -523,17 +438,10 @@ instance Semigroup ArrayConstraint where
     }
 
 instance ArrayConstraint `Types` Array where
-    infer vs = ArrayConstraint { rowCase = infer vs
-      , arrayCase = mconcat (infer <$> Foldable.toList vs) }
-    check ArrayNever           vs = False
-    check ArrayConstraint {..} vs = check rowCase vs
-      && and (check arrayCase <$> Foldable.toList vs)
-
-instance TypeCost ArrayConstraint where
-  typeCost ArrayNever = 0
-  typeCost ArrayConstraint {..} =
-    typeCost arrayCase `min`
-    typeCost rowCase
+    infer vs = ArrayConstraint {
+        rowCase = infer vs
+      , arrayCase = mconcat (infer <$> Foldable.toList vs)
+      }
 ```
 
 # Row constraint
@@ -542,37 +450,30 @@ instance TypeCost ArrayConstraint where
 data RowConstraint = RowTop | RowNever | Row [UnionType]
 
 instance Semigroup RowConstraint where
-  Row bs    <> Row cs
-    | length bs /= length cs = RowTop
-  Row bs    <> Row cs        =
-    Row $ zipWith (<>) bs cs
+  Row bs <> Row cs | length bs /= length cs = RowTop
+  Row bs <> Row cs = Row $ zipWith (<>) bs cs
 
 instance RowConstraint `Types` Array where
   infer = Row
         . Foldable.toList
         . fmap infer
-  check RowTop   _ = True
-  check RowNever _ = False
   check (Row rs) vs
     | length rs == length vs =
       and $
         zipWith check                 rs
                      (Foldable.toList vs)
-  check  _        _ = False
-
-instance TypeCost RowConstraint where
-  typeCost  RowNever  = 0
-  typeCost  RowTop    = inf
-  typeCost (Row cols) = foldMap typeCost cols
 ```
 
 # Union type
 
 ``` {#type .haskell}
 data UnionType = UnionType {
-    unionNull :: NullConstraint,   unionBool :: BoolConstraint
-  , unionNum  :: NumberConstraint, unionStr  :: StringConstraint
-  , unionArr  :: ArrayConstraint,  unionObj  :: ObjectConstraint }
+    unionNull :: NullConstraint
+  , unionBool :: BoolConstraint
+  , unionNum  :: NumberConstraint
+  , unionStr  :: StringConstraint
+  , unionArr  :: ArrayConstraint
+  , unionObj  :: ObjectConstraint }
 ```
 
 # Union type 2
@@ -590,25 +491,6 @@ instance Semigroup UnionType where
 ```
 
 # Union type 3
-
-``` {#union-type-instance .haskell}
-instance UnionType `Types` Value where
-  infer (Bool   b) = mempty { unionBool = infer b  }
-  infer  Null      = mempty { unionNull = infer () }
-  infer (Number n) = mempty { unionNum  = infer n  }
-  infer (String s) = mempty { unionStr  = infer s  }
-  infer (Object o) = mempty { unionObj  = infer o  }
-  infer (Array  a) = mempty { unionArr  = infer a  }
-
-  check UnionType { unionBool } (Bool   b) = check unionBool b
-  check UnionType { unionNull }  Null      = check unionNull ()
-  check UnionType { unionNum  } (Number n) = check unionNum  n
-  check UnionType { unionStr  } (String s) = check unionStr  s
-  check UnionType { unionObj  } (Object o) = check unionObj  o
-  check UnionType { unionArr  } (Array  a) = check unionArr  a
-```
-
-# Union type 4
 ```{.haskell #union-type-instance .hidden}
 -- Since union type is all about optionality,
 -- we need to sum all options from different alternatives:
@@ -628,17 +510,6 @@ instance Semigroup a => Semigroup (Counted a) where
   a <> b = Counted (count      a +  count      b)
                    (constraint a <> constraint b)
 
-instance Monoid a => Monoid (Counted a) where
-  mempty = Counted  0 mempty
-
-instance Typelike          a
-      => Typelike (Counted a) where
-  beyond Counted {..} = beyond constraint
-
-instance TypeCost          ty
-      => TypeCost (Counted ty) where
-  typeCost (Counted _ ty) = typeCost ty
-
 instance          ty  `Types` term
       => (Counted ty) `Types` term where
   infer term = Counted 1 $ infer term
@@ -647,6 +518,8 @@ instance          ty  `Types` term
 
 # Summary
 
+::: incremental
+
 * Monoid-based exposition of type inference
 * Typelike as non-lossy learning
 * Generic monoid suffices
@@ -654,3 +527,4 @@ instance          ty  `Types` term
 * Liberal laws
 * Next version of `json-autotype`
 
+:::

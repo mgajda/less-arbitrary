@@ -3,6 +3,7 @@
 NAME=prezi2
 
 make() {
+  pandoc ${NAME}.md --standalone -o ${NAME}.tex -t beamer
   pandoc ${NAME}.md -o ${NAME}.pdf -t beamer
 }
 
