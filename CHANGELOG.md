@@ -1,5 +1,5 @@
-# Revision history for union-types
+# Revision history for less-arbitrary
 
-## 0.1.0.0 -- YYYY-mm-dd
+0.1.0.0 -- 20200-10-17
 
-* First version. Released on an unsuspecting world.
+* First version of less-arbitrary on Hackage.

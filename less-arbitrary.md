@@ -23,7 +23,7 @@ date:   2020-05-05
 description: |
 link: "https://gitlab.com/migamake/less-arbitrary"
 bibliography:
-  - towards-better-union.bib
+  - less-arbitrary.bib
 conference: GPCE
 prologue: |
   \let\longtable\tabular
