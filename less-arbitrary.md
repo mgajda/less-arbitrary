@@ -303,7 +303,7 @@ Example of `Arbitrary` instance from [@generic-arbitrary] serves as a basic exam
 
 1. First we convert the type to its generic representation:
 
-```{.haskell}
+``` {.haskell}
 genericArbitrary :: (Generic        a
                     ,Arbitrary (Rep a))
                  =>  Gen            a
@@ -312,19 +312,19 @@ genericArbitrary  = to <$> arbitrary
 
 2. We take care of nullary constructors with:
 
-```{.haskell}
+``` {.haskell}
 instance Arbitrary G.U1 where
   arbitrary = pure G.U1
 ```
 3. For all fields arguments are recursively calling `Arbitrary` class method:
 
-```{.haskell}
+``` {.haskell}
 instance Arbitrary c => Arbitrary (G.K1 i c) where
   gArbitrary = G.K1 <$> arbitrary
 ```
 4. We skip metadata by the same recursive call:
 
-```{.haskell}
+``` {.haskell}
 instance Arbitrary           f
       => Arbitrary (G.M1 i c f) where
   arbitrary = G.M1 <$> arbitrary
@@ -333,7 +333,7 @@ instance Arbitrary           f
 5. Given that all arguments of each constructor are joined by `:*:`,
 we need to recursively delve there too:
 
-```{.haskell }
+``` {.haskell }
 instance (Arbitrary  a,
          ,Arbitrary          b)
       =>  Arbitrary (a G.:*: b) where
@@ -343,7 +343,7 @@ instance (Arbitrary  a,
 6. In order to sample all constructors with the same probability we compute
 a number of constructor in each representation type with `SumLen` type family:
 
-```{.haskell}
+``` {.haskell}
 type family SumLen a :: Nat where
   SumLen (a G.:+: b) = (SumLen a) + (SumLen b)
   SumLen a           = 1
@@ -593,3 +593,360 @@ We recommend it to reduce time spent on making test generators.
 
 :::::
 
+
+# Appendix: Module headers {.unnumbered}
+
+```{.haskell file=src/Test/LessArbitrary.hs}
+{-# language DefaultSignatures     #-}
+{-# language FlexibleInstances     #-}
+{-# language FlexibleContexts      #-}
+{-# language GeneralizedNewtypeDeriving #-}
+{-# language Rank2Types            #-}
+{-# language PolyKinds             #-}
+{-# language MultiParamTypeClasses #-}
+{-# language MultiWayIf            #-}
+{-# language ScopedTypeVariables   #-}
+{-# language TypeApplications      #-}
+{-# language TypeOperators         #-}
+{-# language TypeFamilies          #-}
+{-# language UndecidableInstances  #-}
+{-# language AllowAmbiguousTypes   #-}
+{-# language DataKinds             #-}
+module Test.LessArbitrary(
+    LessArbitrary(..)
+  , oneof
+  , choose
+  , CostGen(..)
+  , (<$$$>)
+  , ($$$?)
+  , currentBudget
+  , fasterArbitrary
+  , genericLessArbitrary
+  , genericLessArbitraryMonoid
+  , flatLessArbitrary
+  , spend
+  , withCost
+  , elements
+  , forAll
+  , sizedCost
+  ) where
+
+import qualified Data.HashMap.Strict as Map
+import qualified Data.Set            as Set
+import qualified Data.Vector         as Vector
+import qualified Data.Text           as Text
+import Control.Monad(replicateM)
+import Data.Scientific
+import Data.Proxy
+import qualified Test.QuickCheck.Gen as QC
+import qualified Control.Monad.State.Strict as State
+import Control.Monad.Trans.Class
+import System.Random(Random)
+import GHC.Generics as G
+import GHC.Generics as Generic
+import GHC.TypeLits
+import qualified Test.QuickCheck as QC
+import Data.Hashable
+
+<<costgen>>
+
+-- Mark a costly constructor with this instead of `<$>`
+(<$$$>) :: (a -> b) -> CostGen a -> CostGen b
+costlyConstructor <$$$> arg = do
+  spend 1
+  costlyConstructor <$> arg
+
+<<spend>>
+
+<<budget>>
+
+
+withCost :: Int -> CostGen a -> QC.Gen a
+withCost cost gen = runCostGen gen
+  `State.evalStateT` Cost cost
+
+<<generic-instances>>
+
+<<generic-less-arbitrary>>
+
+<<less-arbitrary-class>>
+
+instance LessArbitrary Bool where
+  lessArbitrary = flatLessArbitrary
+
+instance LessArbitrary Int where
+  lessArbitrary = flatLessArbitrary
+
+instance LessArbitrary Integer where
+  lessArbitrary = flatLessArbitrary
+
+instance LessArbitrary Double where
+  lessArbitrary = flatLessArbitrary
+
+instance LessArbitrary Char where
+  lessArbitrary = flatLessArbitrary
+
+instance (LessArbitrary k
+         ,LessArbitrary   v)
+      => LessArbitrary (k,v) where
+
+instance (LessArbitrary          k
+         ,Ord                    k)
+      =>  LessArbitrary (Set.Set k) where
+  lessArbitrary = Set.fromList <$> lessArbitrary
+
+instance (LessArbitrary              k
+         ,Eq                         k
+         ,Ord                        k
+         ,Hashable                   k 
+         ,LessArbitrary                v)
+      =>  LessArbitrary (Map.HashMap k v) where
+  lessArbitrary =  Map.fromList
+               <$> lessArbitrary
+
+instance LessArbitrary Scientific where
+  lessArbitrary =
+    scientific <$> lessArbitrary
+               <*> lessArbitrary
+
+<<arbitrary-implementation>>
+
+flatLessArbitrary :: QC.Arbitrary a
+              => CostGen a
+flatLessArbitrary  = CostGen $ lift QC.arbitrary
+
+instance LessArbitrary                a
+      => LessArbitrary (Vector.Vector a) where
+  lessArbitrary = Vector.fromList <$> lessArbitrary
+
+<<lifting-arbitrary>>
+
+```
+
+# Appendix: lifting classic `Arbitrary` functions {.unnumbered}
+
+Below are functions and instances
+that are lightly adjusted variants
+of original implementations in `QuickCheck`[@quickcheck]
+
+```{.haskell #lifting-arbitrary}
+instance LessArbitrary  a
+      => LessArbitrary [a] where
+  lessArbitrary = pure [] $$$? do
+    budget <- currentBudget
+    len  <- choose (1,fromEnum budget)
+    spend $ Cost len
+    replicateM   len lessArbitrary
+
+instance QC.Testable          a
+      => QC.Testable (CostGen a) where
+  property = QC.property
+           . sizedCost
+```
+
+Remaining functions are directly copied from `QuickCheck`[@quickCheck],
+with only adjustment being their types and error messages:
+
+```{.haskell #lifting-arbitrary}
+forAll :: CostGen a -> (a -> CostGen b) -> CostGen b
+forAll gen prop = gen >>= prop
+
+oneof   :: [CostGen a] -> CostGen a
+oneof [] = error
+           "LessArbitrary.oneof used with empty list"
+oneof gs = choose (0,length gs - 1) >>= (gs !!)
+
+elements :: [a] -> CostGen a
+elements gs = (gs!!) <$> choose (0,length gs - 1)
+
+choose      :: Random  a
+            =>        (a, a)
+            -> CostGen a
+choose (a,b) = CostGen $ lift $ QC.choose (a, b)
+```
+
+This key function,
+chooses one of the given generators, with a weighted random distribution.
+The input list must be non-empty. Based on QuickCheck[@quickcheck].
+
+```{.haskell .literate #lifting-arbitrary}
+frequency :: [(Int, CostGen a)] -> CostGen a
+frequency [] =
+  error $ "LessArbitrary.frequency "
+       ++ "used with empty list"
+frequency xs
+  | any (< 0) (map fst xs) =
+    error $ "LessArbitrary.frequency: "
+         ++ "negative weight"
+  | all (== 0) (map fst xs) =
+    error $ "LessArbitrary.frequency: "
+         ++ "all weights were zero"
+frequency xs0 = choose (1, tot) >>= (`pick` xs0)
+ where
+  tot = sum (map fst xs0)
+
+  pick n ((k,x):xs)
+    | n <= k    = x
+    | otherwise = pick (n-k) xs
+  pick _ _  = error
+    "LessArbitrary.pick used with empty list"
+```
+
+# Appendix: test suite {.unnumbered}
+
+As observed in [@validity], it is important
+to check basic properties of `Arbitrary` instance
+to guarantee that shrinking terminates:
+
+```{.haskell #arbitrary-laws}
+shrinkCheck :: forall    term.
+              (Arbitrary term
+              ,Eq        term)
+            =>           term
+            -> Bool
+shrinkCheck term =
+  term `notElem` shrink term
+
+arbitraryLaws :: forall    ty.
+                (Arbitrary ty
+                ,Show      ty
+                ,Eq        ty)
+              => Proxy     ty
+              -> Laws
+arbitraryLaws (Proxy :: Proxy ty) =
+  Laws "arbitrary"
+       [("does not shrink to itself",
+         property (shrinkCheck :: ty -> Bool))]
+```
+
+For `LessArbitrary` we can also check that empty budget results in choosing a cheapest option,
+but we need to provide a predicate that confirms what is actually the cheapest:
+
+```{.haskell #less-arbitrary-check}
+otherLaws :: [Laws]
+otherLaws = [lessArbitraryLaws isLeaf]
+  where
+    isLeaf :: Tree Int -> Bool
+    isLeaf (Leaf   _) = True
+    isLeaf (Branch _) = False
+
+lessArbitraryLaws :: LessArbitrary a
+                  => (a -> Bool) -> Laws
+lessArbitraryLaws cheapestPred =
+    Laws "LessArbitrary"
+         [("always selects cheapest",
+           property $
+             prop_alwaysCheapest cheapestPred)]
+
+prop_alwaysCheapest :: LessArbitrary a
+                    => (a -> Bool) -> Gen Bool
+prop_alwaysCheapest cheapestPred =
+  cheapestPred <$> withCost 0 lessArbitrary
+```
+
+Again some module headers:
+```{.haskell file=test/Test/Arbitrary.hs}
+{-# language DataKinds             #-}
+{-# language FlexibleInstances     #-}
+{-# language Rank2Types            #-}
+{-# language MultiParamTypeClasses #-}
+{-# language ScopedTypeVariables   #-}
+{-# language TypeOperators         #-}
+{-# language UndecidableInstances  #-}
+{-# language AllowAmbiguousTypes   #-}
+module Test.Arbitrary(
+      arbitraryLaws
+    ) where
+
+import Data.Proxy
+import Test.QuickCheck
+import Test.QuickCheck.Classes
+import qualified Data.HashMap.Strict as Map
+import           Data.HashMap.Strict(HashMap)
+
+<<arbitrary-laws>>
+```
+
+And we can compare the tests with `LessArbitrary` (which terminates fast, linear time):
+```{.haskell file=test/less/LessArbitrary.hs}
+<<test-file-header>>
+<<test-less-arbitrary-version>>
+
+<<test-file-laws>>
+<<less-arbitrary-check>>
+```
+
+# Appendix: non-terminating test suite {.unnumbered}
+
+Or with a generic `Arbitrary` (which naturally hangs):
+```{.haskell file=test/nonterminating/NonterminatingArbitrary.hs}
+<<test-file-header>>
+<<tree-type-typical-arbitrary>>
+otherLaws = []
+<<test-file-laws>>
+```
+
+Here is the code:
+
+```{.haskell #test-file-header}
+{-# language FlexibleInstances     #-}
+{-# language Rank2Types            #-}
+{-# language MultiParamTypeClasses #-}
+{-# language ScopedTypeVariables   #-}
+{-# language TypeOperators         #-}
+{-# language UndecidableInstances  #-}
+{-# language AllowAmbiguousTypes   #-}
+{-# language DeriveGeneric         #-}
+module Main where
+
+import Data.Proxy
+import Test.QuickCheck
+import qualified GHC.Generics as Generic
+import Test.QuickCheck.Classes
+
+import Test.LessArbitrary
+import Test.Arbitrary
+
+<<tree-type>>
+```
+
+```{.haskell #test-less-arbitrary-version}
+instance LessArbitrary       a
+      => LessArbitrary (Tree a) where
+
+instance LessArbitrary   a
+      => Arbitrary (Tree a) where
+  arbitrary = fasterArbitrary
+```
+
+```{.haskell #test-file-laws}
+
+main :: IO ()
+main = do
+  lawsCheckMany
+    [("Tree",
+      [arbitraryLaws (Proxy :: Proxy (Tree Int))
+      ,eqLaws        (Proxy :: Proxy (Tree Int))
+      ] <> otherLaws)]
+```
+
+# Appendix: convenience functions provided with the module {.unnumbered}
+
+Then we limit our choices when budget is tight:
+```{.haskell #budget}
+currentBudget :: CostGen Cost
+currentBudget = CostGen State.get
+```
+
+```{.haskell #budget .hidden}
+-- unused: loop breaker message type name
+type family ShowType k where
+  ShowType (D1 ('MetaData name _ _ _) _) = name
+  ShowType  other                        = "unknown type"
+
+showType :: forall                      a.
+            (Generic                    a
+            ,KnownSymbol (ShowType (Rep a)))
+         => String
+showType  = symbolVal (Proxy :: Proxy (ShowType (Rep a)))
+```

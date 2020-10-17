@@ -1,23 +1,19 @@
-## ------ language="YAML" file="package.yaml" project://towards-better-union.md#2203
-
-name: union-types
+name: less-arbitrary
 version: '0.1.0.0'
 category: Web
-author: Anonymous
-maintainer: example@example.com
+author: "Michał J. Gajda <mjgajda@migamake.com>"
+maintainer: "Michał J. Gajda <mjgajda@migamake.com>"
 license: BSD-3
 extra-source-files:
 - CHANGELOG.md
 - README.md
 dependencies:
 - base
-- aeson
 - containers
 - text
 - hspec
 - QuickCheck
 - unordered-containers
-- scientific
 - hspec
 - QuickCheck
 - validity
@@ -32,36 +28,30 @@ dependencies:
 - generic-arbitrary
 - mtl
 - hashable
+- random
+- transformers
 library:
   source-dirs: src
   exposed-modules:
-  - Unions
+  - Test.LessArbitrary
 tests:
-  spec:
-    main: Spec.hs
-    source-dirs:
-      - test/lib
-      - test/spec
-    dependencies:
-      - union-types
-      - mtl
-      - random
-      - transformers
-      - hashable
-      - quickcheck-classes
-      - file-embed
-      - bytestring
   less-arbitrary:
     main: LessArbitrary.hs
     source-dirs:
-      - test/lib
-      - test/less
+      - test/less/
+      - test
     dependencies:
-      - union-types
-      - mtl
-      - random
-      - transformers
-      - hashable
+      - less-arbitrary
+
       - quickcheck-classes
       - quickcheck-instances
-## ------ end
+  #nonterminating:
+  # main: Test/Arbitrary.hs
+  # source-dirs:
+  #   - test/nonterminating
+  #   - test
+  # dependencies:
+  #   - less-arbitrary
+  #   - quickcheck-classes
+  #   - quickcheck-instances
+        
