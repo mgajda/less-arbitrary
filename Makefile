@@ -1,6 +1,6 @@
 #SRC=plan.md
-NAME=towards-better-union
-SRC=towards-better-union.md
+NAME=less-arbitrary
+SRC=less-arbitrary.md
 PDF=out/${NAME}.pdf
 LHS=out/${NAME}.lhs
 LHSPP=out/${NAME}.lhs.tex
