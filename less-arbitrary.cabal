@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 9ecaad6529e04d7e7b8cd1e1f35e5ac071c6766f97b98e9ecb76c729e02c43b9
+-- hash: c900031eb7b423dc49cd1e66dd3e62ca0955e19cca79a555beda12a781ba8615
 
 name:           less-arbitrary
 version:        0.1.0.0
@@ -46,7 +46,7 @@ library
       src
   build-depends:
       QuickCheck
-    , base >=4.5
+    , base >=4.5 && <=4.15
     , containers
     , email-validate
     , generic-arbitrary
@@ -77,7 +77,7 @@ test-suite less-arbitrary
       test
   build-depends:
       QuickCheck
-    , base >=4.5
+    , base >=4.5 && <=4.15
     , containers
     , email-validate
     , generic-arbitrary

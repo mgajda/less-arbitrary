@@ -1,8 +1,10 @@
 #!/bin/bash
 
-NAME=towards-better-union
+NAME=less-arbitrary
 
 make;
-open out/${NAME}.pdf &
+xdg-open out/${NAME}.pdf &
 
-while inotifywait $(cat inputs.list) ${NAME}.bib -e modify,close_write,attrib,access; do make; done
+while inotifywait $(cat inputs.list) \
+                  towards-better-union.bib \
+                  -e modify,close_write,attrib,access; do make -f Makefile; done
