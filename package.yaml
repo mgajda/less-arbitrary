@@ -1,10 +1,11 @@
 name: less-arbitrary
-version: '0.1.0.0'
+version: '0.1.0.1'
 category: Web
 author: "Michał J. Gajda <mjgajda@migamake.com>"
 maintainer: "Michał J. Gajda <mjgajda@migamake.com>"
 license: BSD3
 synopsis: Linear time testing with variant of Arbitrary class that always terminates.
+github: mgajda/less-arbitrary
 description: |
   Ever found non-terminating Arbitrary instance?
   Ever wondered what would be a runtime cost of particular Arbitrary instance?
@@ -31,20 +32,10 @@ dependencies:
 - base >= 4.5 && <= 4.15
 - containers
 - text
-- hspec
 - QuickCheck
-- unordered-containers
-- hspec
-- QuickCheck
-- validity
 - vector
 - unordered-containers
 - scientific
-- genvalidity
-- genvalidity-hspec
-- genvalidity-property
-- time
-- email-validate
 - generic-arbitrary
 - mtl
 - hashable
