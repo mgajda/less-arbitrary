@@ -3,12 +3,32 @@ version: '0.1.0.0'
 category: Web
 author: "Michał J. Gajda <mjgajda@migamake.com>"
 maintainer: "Michał J. Gajda <mjgajda@migamake.com>"
-license: BSD-3
+license: BSD3
+synopsis: Linear time testing with variant of Arbitrary class that always terminates.
+description: |
+  Ever found non-terminating Arbitrary instance?
+  Ever wondered what would be a runtime cost of particular Arbitrary instance?
+  .
+  Never let it bother you again:
+    this variant of Arbitrary is automatically generating instances, and allows you to see predictable linear time generators
+    for most types (providing that you have any terminating constructor, that is constructor that does not go deeper into the data structure.)
+  .
+  Usage: 
+  ```
+  import Test.LessArbitrary
+
+  data MyDataType = ...
+    deriving (Show, Generic)
+
+  instance LessArbitrary MyDataType
+  instance Arbitrary where
+    arbitrary = lessArbitrary
+  ```
 extra-source-files:
 - CHANGELOG.md
 - README.md
 dependencies:
-- base
+- base >= 4.5 && <= 4.15
 - containers
 - text
 - hspec
@@ -45,6 +65,7 @@ tests:
 
       - quickcheck-classes
       - quickcheck-instances
+  # Here is an example test that fails 
   #nonterminating:
   # main: Test/Arbitrary.hs
   # source-dirs:
