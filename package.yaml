@@ -13,17 +13,16 @@ description: |
     this variant of Arbitrary is automatically generating instances, and allows you to see predictable linear time generators
     for most types (providing that you have any terminating constructor, that is constructor that does not go deeper into the data structure.)
   .
-  Usage: 
-  ```
-  import Test.LessArbitrary
-
-  data MyDataType = ...
-    deriving (Show, Generic)
-
-  instance LessArbitrary MyDataType
-  instance Arbitrary where
-    arbitrary = lessArbitrary
-  ```
+  Usage:
+  .
+  > import Test.LessArbitrary
+  >
+  > data MyDataType = ...
+  >   deriving (Show, Generic)
+  >
+  > instance LessArbitrary MyDataType
+  > instance Arbitrary where
+  >  arbitrary = lessArbitrary
 extra-source-files:
 - CHANGELOG.md
 - README.md
