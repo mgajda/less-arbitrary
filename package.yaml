@@ -22,7 +22,7 @@ description: |
   >
   > instance LessArbitrary MyDataType
   > instance Arbitrary where
-  >  arbitrary = lessArbitrary
+  >  arbitrary = fasterArbitrary
 extra-source-files:
 - CHANGELOG.md
 - README.md
