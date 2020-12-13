@@ -1,5 +1,5 @@
 name: less-arbitrary
-version: '0.1.1.0'
+version: '0.1.2.0'
 category: Web
 author: "Michał J. Gajda <mjgajda@migamake.com>"
 maintainer: "Michał J. Gajda <mjgajda@migamake.com>"
@@ -53,6 +53,7 @@ library:
   source-dirs: src
   exposed-modules:
   - Test.LessArbitrary
+  - Test.LessArbitrary.Cost
 tests:
   less-arbitrary:
     main: LessArbitrary.hs

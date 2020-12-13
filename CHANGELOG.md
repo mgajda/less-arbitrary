@@ -1,5 +1,12 @@
 # Revision history for less-arbitrary
 
+
+0.1.2.0 -- 2020-12-13
+* Exposed `Test.LessArbitrary.Cost` module.
+
+0.1.1.0 -- 2020-12-13
+* Moved `Cost` to `Test.LessArbitrary.Cost` module.
+
 0.1.0.2 -- 2020-10-17
 
 * Fixed the package metadata.
