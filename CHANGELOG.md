@@ -1,5 +1,8 @@
 # Revision history for less-arbitrary
 
+0.1.4.0 -- 2020-12-14
+* Added `HasCallStack` constraint to get better error locations.
+
 0.1.3.0 -- 2020-12-14
 * Added `suchThat`.
 

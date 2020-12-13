@@ -162,12 +162,15 @@ newtype CostGen                               a =
 We track the spending in the usual way:
 ```{.haskell #spend}
 spend :: Cost -> CostGen ()
-spend c = CostGen $ State.modify (-c+)
+spend c = do
+  CostGen $ State.modify (-c+)
+  checkBudget
 ```
 
 To make generation easier, we introduce `budget check` operator:
 ```{.haskell #budget}
-($$$?) :: CostGen a
+($$$?) :: HasCallStack
+       => CostGen a
        -> CostGen a
        -> CostGen a
 cheapVariants $$$? costlyVariants = do
@@ -176,7 +179,15 @@ cheapVariants $$$? costlyVariants = do
      | budget > -10000      -> cheapVariants
      | otherwise            -> error $
        "Recursive structure with no loop breaker."
+```
 
+```{.haskell #budget}
+checkBudget :: HasCallStack => CostGen ()
+checkBudget = do
+  budget <- CostGen State.get
+  if budget < -10000
+    then error "Recursive structure with no loop breaker."
+    else return ()
 ```
 
 In order to conveniently define our budget generators,
@@ -648,6 +659,7 @@ import System.Random(Random)
 import GHC.Generics as G
 import GHC.Generics as Generic
 import GHC.TypeLits
+import GHC.Stack
 import qualified Test.QuickCheck as QC
 import Data.Hashable
 
@@ -756,7 +768,8 @@ with only adjustment being their types and error messages:
 forAll :: CostGen a -> (a -> CostGen b) -> CostGen b
 forAll gen prop = gen >>= prop
 
-oneof   :: [CostGen a] -> CostGen a
+oneof   :: HasCallStack
+        => [CostGen a] -> CostGen a
 oneof [] = error
            "LessArbitrary.oneof used with empty list"
 oneof gs = choose (0,length gs - 1) >>= (gs !!)
@@ -790,7 +803,8 @@ chooses one of the given generators, with a weighted random distribution.
 The input list must be non-empty. Based on QuickCheck[@quickcheck].
 
 ```{.haskell .literate #lifting-arbitrary}
-frequency :: [(Int, CostGen a)] -> CostGen a
+frequency   :: HasCallStack
+            => [(Int, CostGen a)] -> CostGen a
 frequency [] =
   error $ "LessArbitrary.frequency "
        ++ "used with empty list"
