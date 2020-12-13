@@ -1,5 +1,7 @@
 # Revision history for less-arbitrary
 
+0.1.3.0 -- 2020-12-14
+* Added `suchThat`.
 
 0.1.2.0 -- 2020-12-13
 * Exposed `Test.LessArbitrary.Cost` module.

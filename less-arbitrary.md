@@ -774,6 +774,15 @@ budgetChoose :: CostGen Int
 budgetChoose  = do
   Cost b <- currentBudget
   CostGen $ lift $ QC.choose (1, b)
+
+-- | Version of `suchThat` using budget instead of sized generators.
+cg `suchThat` pred = do
+  result <- cg
+  if pred result
+     then return result
+     else do
+       spend 1
+       cg `suchThat` pred
 ```
 
 This key function,
