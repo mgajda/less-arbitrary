@@ -8,10 +8,12 @@ let languages = entangled.languages #
     [ { name = "json", identifiers = ["json"], comment = jsonComment } ]
 
 
-let watchList = [ "towards-better-union.md", "less-arbitrary.md" ]
+let watchList = [ "less-arbitrary.md" ]
 
 in { entangled = entangled.Config :: { database = database
                                      , watchList = watchList
                                      , languages = languages }
+   , annotate = entangled.Annotate.Standard
+   , useLineDirectives = True
    }
 

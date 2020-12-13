@@ -1,5 +1,4 @@
 ---
-review: true
 title:  "Less Arbitrary waiting time"
 shorttitle: "Less Arbitrary"
 subtitle: "Short paper"
@@ -24,7 +23,7 @@ description: |
 link: "https://gitlab.com/migamake/less-arbitrary"
 bibliography:
   - less-arbitrary.bib
-conference: GPCE
+conference: PREP
 prologue: |
   \let\longtable\tabular
   \let\endlongtable\endtabular
@@ -148,10 +147,12 @@ remembers how many constructors were generated,
 and thus avoid limiting the depth of generated data structures,
 and ignoring estimation of branching factor altogether.
 
-```{.haskell #costgen}
-newtype Cost = Cost Int 
+```{.haskell #cost}
+newtype Cost = Cost Int
   deriving (Eq,Ord,Enum,Bounded,Num)
+```
 
+```{.haskell #costgen}
 newtype CostGen                               a =
         CostGen {
           runCostGen :: State.StateT Cost QC.Gen a }
@@ -609,6 +610,7 @@ We recommend it to reduce time spent on making test generators.
 {-# language TypeApplications      #-}
 {-# language TypeOperators         #-}
 {-# language TypeFamilies          #-}
+{-# language TupleSections         #-}
 {-# language UndecidableInstances  #-}
 {-# language AllowAmbiguousTypes   #-}
 {-# language DataKinds             #-}
@@ -616,6 +618,7 @@ module Test.LessArbitrary(
     LessArbitrary(..)
   , oneof
   , choose
+  , budgetChoose
   , CostGen(..)
   , (<$$$>)
   , ($$$?)
@@ -647,6 +650,8 @@ import GHC.Generics as Generic
 import GHC.TypeLits
 import qualified Test.QuickCheck as QC
 import Data.Hashable
+
+import Test.LessArbitrary.Cost
 
 <<costgen>>
 
@@ -763,6 +768,12 @@ choose      :: Random  a
             =>        (a, a)
             -> CostGen a
 choose (a,b) = CostGen $ lift $ QC.choose (a, b)
+
+-- | Choose but only up to the budget (for array and list sizes)
+budgetChoose :: CostGen Int
+budgetChoose  = do
+  Cost b <- currentBudget
+  CostGen $ lift $ QC.choose (1, b)
 ```
 
 This key function,
@@ -928,6 +939,13 @@ main = do
       [arbitraryLaws (Proxy :: Proxy (Tree Int))
       ,eqLaws        (Proxy :: Proxy (Tree Int))
       ] <> otherLaws)]
+```
+
+```{.haskell file=src/Test/LessArbitrary/Cost.hs}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+module Test.LessArbitrary.Cost where
+
+<<cost>>
 ```
 
 # Appendix: convenience functions provided with the module {.unnumbered}
