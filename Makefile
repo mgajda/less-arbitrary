@@ -17,6 +17,7 @@ CSL=acm-template/acm-sig-proceedings.csl
 #CSL=lncs/springer-lecture-notes-in-computer-science.csl
 GNUPLOT=gnuplot
 OPTIONS=--mathml				\
+	--filter pandoc-filter-indent           \
 	--filter pandoc-crossref		\
  	--filter pandoc-citeproc		\
 	--filter pandoc-hide-codeblocks		\

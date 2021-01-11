@@ -12,6 +12,7 @@
 {-# language TypeApplications      #-}
 {-# language TypeOperators         #-}
 {-# language TypeFamilies          #-}
+{-# language TupleSections         #-}
 {-# language UndecidableInstances  #-}
 {-# language AllowAmbiguousTypes   #-}
 {-# language DataKinds             #-}
@@ -19,6 +20,7 @@ module Test.LessArbitrary(
     LessArbitrary(..)
   , oneof
   , choose
+  , budgetChoose
   , CostGen(..)
   , (<$$$>)
   , ($$$?)
@@ -48,13 +50,13 @@ import System.Random(Random)
 import GHC.Generics as G
 import GHC.Generics as Generic
 import GHC.TypeLits
+import GHC.Stack
 import qualified Test.QuickCheck as QC
 import Data.Hashable
 
--- ~\~ begin <<less-arbitrary.md|costgen>>[0]
-newtype Cost = Cost Int 
-  deriving (Eq,Ord,Enum,Bounded,Num)
+import Test.LessArbitrary.Cost
 
+-- ~\~ begin <<less-arbitrary.md|costgen>>[0]
 newtype CostGen                               a =
         CostGen {
           runCostGen :: State.StateT Cost QC.Gen a }
@@ -69,11 +71,14 @@ costlyConstructor <$$$> arg = do
 
 -- ~\~ begin <<less-arbitrary.md|spend>>[0]
 spend :: Cost -> CostGen ()
-spend c = CostGen $ State.modify (-c+)
+spend c = do
+  CostGen $ State.modify (-c+)
+  checkBudget
 -- ~\~ end
 
 -- ~\~ begin <<less-arbitrary.md|budget>>[0]
-($$$?) :: CostGen a
+($$$?) :: HasCallStack
+       => CostGen a
        -> CostGen a
        -> CostGen a
 cheapVariants $$$? costlyVariants = do
@@ -82,13 +87,20 @@ cheapVariants $$$? costlyVariants = do
      | budget > -10000      -> cheapVariants
      | otherwise            -> error $
        "Recursive structure with no loop breaker."
-
 -- ~\~ end
 -- ~\~ begin <<less-arbitrary.md|budget>>[1]
+checkBudget :: HasCallStack => CostGen ()
+checkBudget = do
+  budget <- CostGen State.get
+  if budget < -10000
+    then error "Recursive structure with no loop breaker."
+    else return ()
+-- ~\~ end
+-- ~\~ begin <<less-arbitrary.md|budget>>[2]
 currentBudget :: CostGen Cost
 currentBudget = CostGen State.get
 -- ~\~ end
--- ~\~ begin <<less-arbitrary.md|budget>>[2]
+-- ~\~ begin <<less-arbitrary.md|budget>>[3]
 -- unused: loop breaker message type name
 type family ShowType k where
   ShowType (D1 ('MetaData name _ _ _) _) = name
@@ -311,7 +323,8 @@ instance QC.Testable          a
 forAll :: CostGen a -> (a -> CostGen b) -> CostGen b
 forAll gen prop = gen >>= prop
 
-oneof   :: [CostGen a] -> CostGen a
+oneof   :: HasCallStack
+        => [CostGen a] -> CostGen a
 oneof [] = error
            "LessArbitrary.oneof used with empty list"
 oneof gs = choose (0,length gs - 1) >>= (gs !!)
@@ -323,9 +336,25 @@ choose      :: Random  a
             =>        (a, a)
             -> CostGen a
 choose (a,b) = CostGen $ lift $ QC.choose (a, b)
+
+-- | Choose but only up to the budget (for array and list sizes)
+budgetChoose :: CostGen Int
+budgetChoose  = do
+  Cost b <- currentBudget
+  CostGen $ lift $ QC.choose (1, b)
+
+-- | Version of `suchThat` using budget instead of sized generators.
+cg `suchThat` pred = do
+  result <- cg
+  if pred result
+     then return result
+     else do
+       spend 1
+       cg `suchThat` pred
 -- ~\~ end
 -- ~\~ begin <<less-arbitrary.md|lifting-arbitrary>>[2]
-frequency :: [(Int, CostGen a)] -> CostGen a
+frequency   :: HasCallStack
+            => [(Int, CostGen a)] -> CostGen a
 frequency [] =
   error $ "LessArbitrary.frequency "
        ++ "used with empty list"

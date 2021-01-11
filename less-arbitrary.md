@@ -596,7 +596,9 @@ We show how to quickly define terminating test generators using generic programm
 This method may be transferred to other generic programming regimes
 like Featherweight Go or Featherweight Java.
 
-We recommend it to reduce time spent on making test generators.
+We recommend because it reduces time spent on making test generators
+and improves user experience when a data structure
+with no terminating constructors is defined.
 
 
 # Bibliography
