@@ -5,6 +5,7 @@ author: "Michał J. Gajda <mjgajda@migamake.com>"
 maintainer: "Michał J. Gajda <mjgajda@migamake.com>"
 license: BSD3
 synopsis: Linear time testing with variant of Arbitrary class that always terminates.
+github: mgajda/less-arbitrary
 description: |
   Ever found non-terminating Arbitrary instance?
   Ever wondered what would be a runtime cost of particular Arbitrary instance?
