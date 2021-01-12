@@ -881,7 +881,7 @@ prop_alwaysCheapest cheapestPred =
 ```
 
 Again some module headers:
-```{.haskell file=test/Test/Arbitrary.hs}
+```{.haskell file=src/Test/Arbitrary/Laws.hs}
 {-# language DataKinds             #-}
 {-# language FlexibleInstances     #-}
 {-# language Rank2Types            #-}
@@ -890,7 +890,7 @@ Again some module headers:
 {-# language TypeOperators         #-}
 {-# language UndecidableInstances  #-}
 {-# language AllowAmbiguousTypes   #-}
-module Test.Arbitrary(
+module Test.Arbitrary.Laws(
       arbitraryLaws
     ) where
 
@@ -941,7 +941,7 @@ import qualified GHC.Generics as Generic
 import Test.QuickCheck.Classes
 
 import Test.LessArbitrary
-import Test.Arbitrary
+import Test.Arbitrary.Laws
 
 <<tree-type>>
 ```

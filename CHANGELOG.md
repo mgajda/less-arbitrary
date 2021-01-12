@@ -1,5 +1,8 @@
 # Revision history for less-arbitrary
 
+0.1.5.0 -- 2020-01-12
+* Exposed Test.Arbitrary.Laws for convenient testing.
+
 0.1.4.0 -- 2020-12-14
 * Added `HasCallStack` constraint to get better error locations.
 

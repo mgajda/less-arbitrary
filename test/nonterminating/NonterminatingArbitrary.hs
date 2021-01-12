@@ -17,7 +17,7 @@ import qualified GHC.Generics as Generic
 import Test.QuickCheck.Classes
 
 import Test.LessArbitrary
-import Test.Arbitrary
+import Test.Arbitrary.Laws
 
 -- ~\~ begin <<less-arbitrary.md|tree-type>>[0]
 data Tree        a =
