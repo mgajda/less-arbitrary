@@ -865,7 +865,9 @@ otherLaws = [lessArbitraryLaws isLeaf]
     isLeaf :: Tree Int -> Bool
     isLeaf (Leaf   _) = True
     isLeaf (Branch _) = False
+```
 
+```{.haskell #less-arbitrary-laws}
 lessArbitraryLaws :: LessArbitrary a
                   => (a -> Bool) -> Laws
 lessArbitraryLaws cheapestPred =
@@ -901,6 +903,29 @@ import qualified Data.HashMap.Strict as Map
 import           Data.HashMap.Strict(HashMap)
 
 <<arbitrary-laws>>
+```
+
+```{.haskell file=src/Test/LessArbitrary/Laws.hs}
+{-# language DataKinds             #-}
+{-# language FlexibleInstances     #-}
+{-# language Rank2Types            #-}
+{-# language MultiParamTypeClasses #-}
+{-# language ScopedTypeVariables   #-}
+{-# language TypeOperators         #-}
+{-# language UndecidableInstances  #-}
+{-# language AllowAmbiguousTypes   #-}
+module Test.LessArbitrary.Laws(
+      lessArbitraryLaws
+    ) where
+
+import Data.Proxy
+import Test.QuickCheck(Gen, property)
+import Test.QuickCheck.Classes(Laws(..))
+import Test.LessArbitrary
+import qualified Data.HashMap.Strict as Map
+import           Data.HashMap.Strict(HashMap)
+
+<<less-arbitrary-laws>>
 ```
 
 And we can compare the tests with `LessArbitrary` (which terminates fast, linear time):
@@ -942,6 +967,7 @@ import Test.QuickCheck.Classes
 
 import Test.LessArbitrary
 import Test.Arbitrary.Laws
+import Test.LessArbitrary.Laws
 
 <<tree-type>>
 ```

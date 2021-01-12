@@ -56,6 +56,7 @@ library:
   - Test.LessArbitrary
   - Test.LessArbitrary.Cost
   - Test.Arbitrary.Laws
+  - Test.LessArbitrary.Laws
 tests:
   less-arbitrary:
     main: LessArbitrary.hs

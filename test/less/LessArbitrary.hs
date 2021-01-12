@@ -18,6 +18,7 @@ import Test.QuickCheck.Classes
 
 import Test.LessArbitrary
 import Test.Arbitrary.Laws
+import Test.LessArbitrary.Laws
 
 -- ~\~ begin <<less-arbitrary.md|tree-type>>[0]
 data Tree        a =
@@ -52,18 +53,5 @@ otherLaws = [lessArbitraryLaws isLeaf]
     isLeaf :: Tree Int -> Bool
     isLeaf (Leaf   _) = True
     isLeaf (Branch _) = False
-
-lessArbitraryLaws :: LessArbitrary a
-                  => (a -> Bool) -> Laws
-lessArbitraryLaws cheapestPred =
-    Laws "LessArbitrary"
-         [("always selects cheapest",
-           property $
-             prop_alwaysCheapest cheapestPred)]
-
-prop_alwaysCheapest :: LessArbitrary a
-                    => (a -> Bool) -> Gen Bool
-prop_alwaysCheapest cheapestPred =
-  cheapestPred <$> withCost 0 lessArbitrary
 -- ~\~ end
 -- ~\~ end

@@ -18,6 +18,7 @@ import Test.QuickCheck.Classes
 
 import Test.LessArbitrary
 import Test.Arbitrary.Laws
+import Test.LessArbitrary.Laws
 
 -- ~\~ begin <<less-arbitrary.md|tree-type>>[0]
 data Tree        a =
