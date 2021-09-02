@@ -13,8 +13,12 @@ abstract: |
   Property testing is the cheapest and most precise way of building up a test suite for your program.
   Especially if the datatypes enjoy nice mathematical laws.
   But it is also the easiest way to make it run for an unreasonably long time.
-  We prove connection between deeply recursive data structures, and epidemic growth rate, and show how to fix the problem, and make Arbitrary instances run in linear time with respect to assumed test size.
-date:   2020-09-03
+  We show a simple way to add state to generators,
+  and simultaneously make them run in an expected linear time.
+
+  The method has a bonus of detecting non-terminating example generation loops,
+  and reporting them.
+date:   2021-09-03
 link: "https://gitlab.com/migamake/philosophy-articles/towards-better-union"
 bibliography:
   - multicloud-binding.bib
@@ -23,7 +27,6 @@ listings: true
 acks: |
 
   Migamake Pte Ltd sponsored the effort.
-  We thank Ronan Orozco for his contribution to data scraping.
 
 ---
 
@@ -196,13 +199,13 @@ instance _ => Arbitrary MyType where
 newtype Cost = Cost Int 
   deriving (Eq,Ord,Enum,Bounded,Num)
 
-newtype CostGen                               a =
+newtype CostGen                             s         a =
         CostGen {
-          runCostGen :: State.StateT Cost QC.Gen a }
+          runCostGen :: State.StateT (Cost, s) QC.Gen a }
   deriving (Functor, Applicative, Monad, State.MonadFix)
 
 spend :: Cost -> CostGen ()
-spend c = CostGen $ State.modify (-c+)
+spend c = CostGen $ State.modify (\(b, s) -> (b-c, s))
 ```
 
 # Solution: budget check operator
@@ -220,14 +223,16 @@ cheapVariants $$$? costlyVariants = do
        "Recursive structure with no loop breaker."
 ```
 
+The operator also reports non-terminating example generation.
+
 # Solution with class
 
 ```{.haskell}
-class LessArbitrary a where
-  lessArbitrary :: CostGen a
-  default lessArbitrary :: (Generic             a
-                           ,GLessArbitrary (Rep a))
-                        =>  CostGen             a
+class LessArbitrary                        s      a where
+  lessArbitrary         :: CostGen         s      a
+  default lessArbitrary :: (Generic               a
+                           ,GLessArbitrary s (Rep a))
+                        =>  CostGen        s      a
   lessArbitrary = genericLessArbitrary
 ```
 
@@ -235,16 +240,19 @@ class LessArbitrary a where
 
 
 ```{.haskell #generic-less-arbitrary}
-class GLessArbitrary datatype where
-  gLessArbitrary :: CostGen (datatype p)
-  cheapest       :: CostGen (datatype p)
+class GLessArbitrary        s  datatype where
+  gLessArbitrary :: CostGen s (datatype p)
+  cheapest       :: CostGen s (datatype p)
 ```
 
 # Summary
 
-* Fix Arbitrary to make it predictable
-* Generics get us agile
-* Always terminates
-* Better error message in case of loop
+::: incremental
+
+* Fixes Arbitrary to make it predictable
+* Generics make it agile
+* State argument for extra data in generator
+* Error message in case of loop
 * Simplicity can be copied to other languages
 
+:::

@@ -2,23 +2,26 @@
 -- ~\~ begin <<less-arbitrary.md|test/nonterminating/NonterminatingArbitrary.hs>>[0]
 -- ~\~ begin <<less-arbitrary.md|test-file-header>>[0]
 {-# language FlexibleInstances     #-}
+{-# language InstanceSigs          #-}
 {-# language Rank2Types            #-}
 {-# language MultiParamTypeClasses #-}
 {-# language ScopedTypeVariables   #-}
+{-# language TypeApplications      #-}
 {-# language TypeOperators         #-}
 {-# language UndecidableInstances  #-}
 {-# language AllowAmbiguousTypes   #-}
 {-# language DeriveGeneric         #-}
 module Main where
 
-import Data.Proxy
-import Test.QuickCheck
+import           Data.Proxy
+import           Test.QuickCheck
+import qualified Test.QuickCheck.Gen as QC
 import qualified GHC.Generics as Generic
-import Test.QuickCheck.Classes
+import           Test.QuickCheck.Classes
 
-import Test.LessArbitrary
-import Test.Arbitrary.Laws
-import Test.LessArbitrary.Laws
+import           Test.LessArbitrary
+import           Test.Arbitrary.Laws
+import           Test.LessArbitrary.Laws
 
 -- ~\~ begin <<less-arbitrary.md|tree-type>>[0]
 data Tree        a =
