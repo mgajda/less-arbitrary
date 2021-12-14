@@ -18,15 +18,15 @@ CSL=acm-template/acm-sig-proceedings.csl
 GNUPLOT=gnuplot
 OPTIONS=--mathml				\
 	--filter pandoc-filter-indent           \
-	--filter pandoc-crossref		\
- 	--filter pandoc-citeproc		\
-	--filter pandoc-hide-codeblocks		\
+ 	--citeproc		\
 	--highlight-style=haddock		\
 	--from=markdown+tex_math_dollars+yaml_metadata_block+footnotes+yaml_metadata_block \
 	--columns 40 \
-	--csl ${CSL} \
-	--filter pandoc-filter-graphviz \
+	--csl ${CSL}
 
+#	--filter pandoc-hide-codeblocks		\
+#       --filter pandoc-filter-graphviz \
+#	--filter pandoc-crossref		\
 #	--listings \
 #	--filter pandoc-citeproc		
 
