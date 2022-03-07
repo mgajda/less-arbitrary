@@ -820,7 +820,7 @@ instance (QC.Testable            a
            . sizedCost
 ```
 
-Remaining functions are directly copied from `QuickCheck`[@quickCheck],
+Remaining functions are directly copied from `QuickCheck`[@quickcheck],
 with only adjustment being their types and error messages:
 
 ```{.haskell #lifting-arbitrary}
