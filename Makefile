@@ -11,10 +11,10 @@ DOCX=out/${NAME}.docx
 REFDOCX=acm_submission_template.docx
 PICS=offset-array-example.eps
 
-TEMPLATE=acm-template/new-template.tex
-CSL=acm-template/acm-sig-proceedings.csl
-#TEMPLATE=lncs/template.tex
-#CSL=lncs/springer-lecture-notes-in-computer-science.csl
+#TEMPLATE=acm-template/new-template.tex
+#CSL=acm-template/acm-sig-proceedings.csl
+TEMPLATE=lncs/template.tex
+CSL=lncs/springer-lecture-notes-in-computer-science.csl
 GNUPLOT=gnuplot
 OPTIONS=--mathml				\
 	--filter pandoc-filter-indent           \

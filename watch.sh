@@ -1,6 +1,6 @@
 #!/bin/bash
 
-NAME=towards-better-union
+NAME=less-arbitrary
 
 make;
 xdg-open out/${NAME}.pdf &
