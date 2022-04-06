@@ -1,15 +1,15 @@
 cradle:
   multi:
-    - path: ./src
+    - path: lib/src
       config:
         cradle:
           stack:
-            component: "union-types:lib"
-    - path: ./test
+            component: "less-arbitrary:lib"
+    - path: lib/test
       config:
         cradle:
           stack:
-            component: "union-types:test:spec"
+            component: "less-arbitrary:test:spec"
     - path: ./refs
       config:
         cradle:

@@ -1,3 +1,11 @@
 resolver: lts-14.27
 packages:
 - .
+- less-arbitrary-benchmark
+
+extra-deps:
+#- dragen-0.1.0.0@sha256:ee36277492fbf6dd0d7b5143b595f2ecaf899cb8680ad6a395356cabda241da2,2264
+- gencheck-0.1.1@sha256:5781686396e67ec142339ef0d3e1920c0d4d6421dfa261beb980f0d2ba14e8e6,2266
+- lazy-search-0.1.2.1@sha256:c942a01e4a64881f89c72eaef5e3a78eba8750759cd66996c6746a2a7cabe703,1199 # works!
+# Deps of deps
+
