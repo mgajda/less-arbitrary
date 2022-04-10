@@ -24,6 +24,9 @@ dependencies:
 - testing-feat
 - lazy-search
 - hedgehog
+- less-arbitrary
+- QuickCheck
+- criterion
 # These are problematic:
 #- gencheck
 #- dragen
