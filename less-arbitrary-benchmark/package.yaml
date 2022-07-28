@@ -21,12 +21,14 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
-- testing-feat
-- lazy-search
-- hedgehog
-- less-arbitrary
-- QuickCheck
+- abstract-par
 - criterion
+- hedgehog
+- lazy-search
+- less-arbitrary
+- testing-feat
+- QuickCheck
+- size-based
 # These are problematic:
 #- gencheck
 #- dragen
