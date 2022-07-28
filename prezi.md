@@ -1,5 +1,6 @@
 ---
 title:  "Less arbitrary waiting time"
+subtitle: LambdaDays2022
 author:
   - Michał J. Gajda
   - "https://www.migamake.com"
@@ -18,10 +19,10 @@ abstract: |
 
   The method has a bonus of detecting non-terminating example generation loops,
   and reporting them.
-date:   2021-09-03
+date:   2022-07-28
 link: "https://gitlab.com/migamake/philosophy-articles/towards-better-union"
 bibliography:
-  - multicloud-binding.bib
+  - less-arbitrary.bib
 tables: true
 listings: true
 acks: |
@@ -244,6 +245,27 @@ class GLessArbitrary        s  datatype where
   gLessArbitrary :: CostGen s (datatype p)
   cheapest       :: CostGen s (datatype p)
 ```
+
+# Benchmarks
+
+Binary tree only (2 lines of datatype).
+
+| Implementation         | Execution time | Lines | 
+|:-----------------------|---------------:|------:|
+| Generic arbitrary      |       $\infty$ |     2 |
+| Arbitrary with halving |       177.0 μs |     8 |
+| Less arbitrary         |       341.8 μs |     1 |
+
+# Benchmarks (2)
+
+| Implementation         | Execution time | Lines   |
+|:-----------------------|---------------:|--------:|
+| Generic arbitrary      |       $\infty$ |       2 |
+| Arbitrary with halving |       177.0 μs |       8 |
+| Less arbitrary         |       341.8 μs |       1 |
+| Feat                   |       133.9 μs |     6+6 |
+
+Feat needs 6 loc + 6 declarations of _driver_.
 
 # Summary
 
